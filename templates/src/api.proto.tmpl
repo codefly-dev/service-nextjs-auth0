@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package {{.Service.Proto.Package}};
+
+message InfoRequest {
+}
+
+message InfoResponse {
+}
+
+service {{.Service.TitleName}} {
+    rpc Info(InfoRequest) returns (InfoResponse);
+}

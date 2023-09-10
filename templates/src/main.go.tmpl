@@ -1,0 +1,28 @@
+package main
+
+import (
+	"fmt"
+	"google.golang.org/grpc"
+	"log"
+	"net"
+
+	{{.Service.Proto.PackageAlias}} "{{.Service.Go.Package}}/gen"
+	adapters "{{.Service.Go.Package}}/pkg/adapters"
+)
+
+func main() {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 9000))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	s := adapters.Server{}
+
+	grpcServer := grpc.NewServer()
+
+	{{.Service.Proto.PackageAlias}}.Register{{.Service.TitleName}}Server(grpcServer, &s)
+
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %s", err)
+	}
+}
