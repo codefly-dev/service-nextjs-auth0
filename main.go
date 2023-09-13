@@ -11,6 +11,24 @@ var conf = configurations.Plugin{
 	Version: "0.0.0",
 }
 
+type Service struct {
+	Location string
+	Spec     *Spec
+}
+
+func NewService() *Service {
+	return &Service{
+		Spec: &Spec{},
+	}
+}
+
+const Source = "src"
+
+type Spec struct {
+	Src              string `mapstructure:"src"`
+	WithDebugSymbols string `mapstructure:"with-debug-symbols"`
+}
+
 func main() {
 	plugins.Register(
 		&plugins.Plugin{

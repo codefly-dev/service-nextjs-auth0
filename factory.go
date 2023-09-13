@@ -4,8 +4,9 @@ import (
 	"embed"
 	"fmt"
 	"github.com/hygge-io/hygge/pkg/configurations"
-	"github.com/hygge-io/hygge/pkg/platform/plugins"
+	"github.com/hygge-io/hygge/pkg/plugins"
 	"github.com/hygge-io/hygge/pkg/plugins/helpers"
+	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
 	factoryv1 "github.com/hygge-io/hygge/proto/services/factory/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -14,19 +15,16 @@ import (
 )
 
 type Factory struct {
+	*Service
 	Logger   *plugins.PluginLogger
 	Identity *factoryv1.ServiceIdentity
-}
-
-const Source = "src"
-
-type Spec struct {
-	Src string `mapstructure:"src"`
+	Location string
 }
 
 func NewFactory() *Factory {
 	return &Factory{
-		Logger: plugins.NewPluginLogger(conf.Name()),
+		Logger:  plugins.NewPluginLogger(conf.Name()),
+		Service: NewService(),
 	}
 }
 
@@ -54,63 +52,70 @@ type CreateConfiguration struct {
 	Plugin      configurations.Plugin
 }
 
-func (f *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
-	defer f.Logger.Catch()
+func (service *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
+	defer service.Logger.Catch()
 
-	f.Logger.Debug("factory>init: initializing service: %s", req)
-	f.Identity = req.Identity
+	service.Identity = req.Identity
+	service.Location = req.Location
+
+	err := configurations.LoadSpec(req.Spec, &service.Spec)
+	if err != nil {
+		return nil, service.Logger.WrapErrorf(err, "factory>init: cannot load spec")
+	}
+	service.Logger.Debug("factory[init] initializing service with Spec: %s", service.Spec)
+
 	return &factoryv1.InitResponse{}, nil
 }
 
-func (f *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
-	defer f.Logger.Catch()
+func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
+	defer service.Logger.Catch()
 
-	f.Logger.Debug("factory>create: req=%s", req)
+	service.Logger.Debug("factory>create: req=%s", req)
 	converter := cases.Title(language.English)
 
 	// "Class name"
-	title := converter.String(f.Identity.Name)
+	title := converter.String(service.Identity.Name)
 	// Proto package
-	proto := fmt.Sprintf("%s.v1", f.Identity.Name)
+	proto := fmt.Sprintf("%s.v1", service.Identity.Name)
 
-	err := helpers.CopyTemplateDir(f.Logger, fs, req.Instructions.Destination, CreateConfiguration{
-		Name:        f.Identity.Name,
-		Destination: req.Instructions.Destination,
-		Namespace:   f.Identity.Name,
+	err := helpers.CopyTemplateDir(service.Logger, fs, service.Location, CreateConfiguration{
+		Name:        service.Identity.Name,
+		Destination: service.Location,
+		Namespace:   service.Identity.Name,
 		Service: CreateService{
-			Name:      f.Identity.Name,
+			Name:      service.Identity.Name,
 			TitleName: title,
 			Proto: Proto{
 				Package:      proto,
 				PackageAlias: strings.Replace(proto, ".", "_", -1),
 			},
 			Go: GenerateInstructions{
-				Package: f.Identity.Domain,
+				Package: service.Identity.Domain,
 			},
 		},
 		Plugin: conf,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("factory>create: cannot copy from template dir %s for %s: %v", conf.Name(), f.Identity.Name, err)
+		return nil, fmt.Errorf("factory>create: cannot copy from template dir %s for %s: %v", conf.Name(), service.Identity.Name, err)
 	}
 
-	conf, err := configurations.LoadServiceFromDir(req.Instructions.Destination)
+	conf, err := configurations.LoadServiceFromDir(service.Location)
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot load service configuration: %v", err)
 	}
-	f.Logger.Info("factory>create: loaded service configuration: %s", conf)
+	service.Logger.Info("factory>create: loaded service configuration: %s", conf)
 	spec := Spec{Src: Source}
 
 	err = conf.AddSpec(spec)
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot add spec: %v", err)
 	}
-	err = conf.SaveAtDir(req.Instructions.Destination)
+	err = conf.SaveAtDir(service.Location)
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot save service configuration: %v", err)
 	}
 
-	helper := helpers.Go{Dir: path.Join(req.Instructions.Destination, Source)}
+	helper := golanghelpers.Go{Dir: path.Join(service.Location, Source)}
 
 	err = helper.BufGenerate()
 	if err != nil {
@@ -124,12 +129,12 @@ func (f *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	return &factoryv1.CreateResponse{}, nil
 }
 
-func (f *Factory) Refresh(req *factoryv1.RefreshRequest) (*factoryv1.RefreshResponse, error) {
-	defer f.Logger.Catch()
+func (service *Factory) Refresh(req *factoryv1.RefreshRequest) (*factoryv1.RefreshResponse, error) {
+	defer service.Logger.Catch()
 
-	f.Logger.Debug("refreshing service: %v", req)
+	service.Logger.Debug("refreshing service: %v", req)
 
-	helper := helpers.Go{Dir: path.Join(req.Destination, Source)}
+	helper := golanghelpers.Go{Dir: path.Join(req.Destination, Source)}
 
 	err := helper.BufGenerate()
 	if err != nil {
