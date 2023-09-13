@@ -3,10 +3,10 @@ package main
 import (
 	"embed"
 	"fmt"
-	"github.com/hygge-io/hygge-cli/pkg/configurations"
-	"github.com/hygge-io/hygge-cli/pkg/platform/plugins"
-	"github.com/hygge-io/hygge-cli/pkg/plugins/helpers"
-	factoryv1 "github.com/hygge-io/hygge-cli/proto/services/factory/v1"
+	"github.com/hygge-io/hygge/pkg/configurations"
+	"github.com/hygge-io/hygge/pkg/platform/plugins"
+	"github.com/hygge-io/hygge/pkg/plugins/helpers"
+	factoryv1 "github.com/hygge-io/hygge/proto/services/factory/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"path"
@@ -18,8 +18,10 @@ type Factory struct {
 	Identity *factoryv1.ServiceIdentity
 }
 
+const Source = "src"
+
 type Spec struct {
-	Src string
+	Src string `mapstructure:"src"`
 }
 
 func NewFactory() *Factory {
@@ -92,26 +94,23 @@ func (f *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, fmt.Errorf("factory>create: cannot copy from template dir %s for %s: %v", conf.Name(), f.Identity.Name, err)
 	}
 
-	conf := configurations.Service{
-		Kind:         "service",
-		Name:         f.Identity.Name,
-		Domain:       f.Identity.Domain,
-		Namespace:    f.Identity.Namespace,
-		Plugin:       conf,
-		Dependencies: []configurations.ServiceEntry{},
+	conf, err := configurations.LoadServiceFromDir(req.Instructions.Destination)
+	if err != nil {
+		return nil, fmt.Errorf("factory>create: cannot load service configuration: %v", err)
 	}
-	spec := Spec{Src: "src"}
+	f.Logger.Info("factory>create: loaded service configuration: %s", conf)
+	spec := Spec{Src: Source}
 
 	err = conf.AddSpec(spec)
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot add spec: %v", err)
 	}
-	err = conf.Save(req.Instructions.Destination)
+	err = conf.SaveAtDir(req.Instructions.Destination)
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot save service configuration: %v", err)
 	}
 
-	helper := helpers.Go{Dir: path.Join(req.Instructions.Destination, "src")}
+	helper := helpers.Go{Dir: path.Join(req.Instructions.Destination, Source)}
 
 	err = helper.BufGenerate()
 	if err != nil {
@@ -130,7 +129,7 @@ func (f *Factory) Refresh(req *factoryv1.RefreshRequest) (*factoryv1.RefreshResp
 
 	f.Logger.Debug("refreshing service: %v", req)
 
-	helper := helpers.Go{Dir: path.Join(req.Destination, "src")}
+	helper := helpers.Go{Dir: path.Join(req.Destination, Source)}
 
 	err := helper.BufGenerate()
 	if err != nil {

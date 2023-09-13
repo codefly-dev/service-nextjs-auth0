@@ -1,2 +1,2 @@
 echo Building go-grpc
-go build -o go-grpc:0.0.0.so *.go
+go build -o ~/.hygge/plugins/hygge-io/go-grpc:latest.so *.go

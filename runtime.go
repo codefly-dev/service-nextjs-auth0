@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/hygge-io/hygge-cli/pkg/platform/plugins"
-	runtimev1 "github.com/hygge-io/hygge-cli/proto/services/runtime/v1"
+	"github.com/hygge-io/hygge/pkg/platform/plugins"
+	runtimev1 "github.com/hygge-io/hygge/proto/services/runtime/v1"
 )
 
 type Runtime struct {

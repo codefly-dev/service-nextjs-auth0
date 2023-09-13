@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/hygge-io/hygge-cli/pkg/configurations"
-	"github.com/hygge-io/hygge-cli/pkg/plugins"
-	"github.com/hygge-io/hygge-cli/pkg/plugins/services"
+	"github.com/hygge-io/hygge/pkg/configurations"
+	"github.com/hygge-io/hygge/pkg/plugins"
+	"github.com/hygge-io/hygge/pkg/plugins/services"
 )
 
 var conf = configurations.Plugin{
