@@ -12,21 +12,24 @@ var conf = configurations.Plugin{
 }
 
 type Service struct {
-	Location string
-	Spec     *Spec
+	PluginLogger *plugins.PluginLogger
+	Location     string
+	Spec         *Spec
 }
 
 func NewService() *Service {
 	return &Service{
-		Spec: &Spec{},
+		PluginLogger: plugins.NewPluginLogger(conf.Name()),
+		Spec:         &Spec{},
 	}
 }
 
 const Source = "src"
 
 type Spec struct {
-	Src              string `mapstructure:"src"`
-	WithDebugSymbols string `mapstructure:"with-debug-symbols"`
+	Src   string `mapstructure:"src"`
+	Watch bool   `mapstructure:"watch"`
+	Debug bool   `mapstructure:"debug"`
 }
 
 func main() {

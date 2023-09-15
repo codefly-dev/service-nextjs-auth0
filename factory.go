@@ -4,7 +4,6 @@ import (
 	"embed"
 	"fmt"
 	"github.com/hygge-io/hygge/pkg/configurations"
-	"github.com/hygge-io/hygge/pkg/plugins"
 	"github.com/hygge-io/hygge/pkg/plugins/helpers"
 	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
 	factoryv1 "github.com/hygge-io/hygge/proto/services/factory/v1"
@@ -16,14 +15,12 @@ import (
 
 type Factory struct {
 	*Service
-	Logger   *plugins.PluginLogger
 	Identity *factoryv1.ServiceIdentity
 	Location string
 }
 
 func NewFactory() *Factory {
 	return &Factory{
-		Logger:  plugins.NewPluginLogger(conf.Name()),
 		Service: NewService(),
 	}
 }
@@ -53,24 +50,23 @@ type CreateConfiguration struct {
 }
 
 func (service *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
-	defer service.Logger.Catch()
+	defer service.PluginLogger.Catch()
 
 	service.Identity = req.Identity
 	service.Location = req.Location
 
 	err := configurations.LoadSpec(req.Spec, &service.Spec)
 	if err != nil {
-		return nil, service.Logger.WrapErrorf(err, "factory>init: cannot load spec")
+		return nil, service.PluginLogger.WrapErrorf(err, "factory>init: cannot load spec")
 	}
-	service.Logger.Debug("factory[init] initializing service with Spec: %s", service.Spec)
+	service.PluginLogger.Debug("factory[init] initializing service with Spec: %v", service.Spec)
 
 	return &factoryv1.InitResponse{}, nil
 }
 
 func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
-	defer service.Logger.Catch()
+	defer service.PluginLogger.Catch()
 
-	service.Logger.Debug("factory>create: req=%s", req)
 	converter := cases.Title(language.English)
 
 	// "Class name"
@@ -78,7 +74,7 @@ func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateR
 	// Proto package
 	proto := fmt.Sprintf("%s.v1", service.Identity.Name)
 
-	err := helpers.CopyTemplateDir(service.Logger, fs, service.Location, CreateConfiguration{
+	err := helpers.CopyTemplateDir(service.PluginLogger, fs, service.Location, CreateConfiguration{
 		Name:        service.Identity.Name,
 		Destination: service.Location,
 		Namespace:   service.Identity.Name,
@@ -103,7 +99,7 @@ func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateR
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot load service configuration: %v", err)
 	}
-	service.Logger.Info("factory>create: loaded service configuration: %s", conf)
+	service.PluginLogger.Info("factory[create] loaded service configuration: %v", conf)
 	spec := Spec{Src: Source}
 
 	err = conf.AddSpec(spec)
@@ -130,9 +126,9 @@ func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateR
 }
 
 func (service *Factory) Refresh(req *factoryv1.RefreshRequest) (*factoryv1.RefreshResponse, error) {
-	defer service.Logger.Catch()
+	defer service.PluginLogger.Catch()
 
-	service.Logger.Debug("refreshing service: %v", req)
+	service.PluginLogger.Debug("refreshing service: %v", req)
 
 	helper := golanghelpers.Go{Dir: path.Join(req.Destination, Source)}
 
