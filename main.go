@@ -9,6 +9,7 @@ import (
 var conf = configurations.Plugin{
 	Base:    "hygge-io/go-grpc",
 	Version: "0.0.0",
+	Kind:    configurations.PluginService,
 }
 
 type Service struct {
@@ -34,14 +35,6 @@ type Spec struct {
 
 func main() {
 	plugins.Register(
-		&plugins.Plugin{
-			Configuration:  conf,
-			Type:           plugins.ServiceFactory,
-			Implementation: &services.ServiceFactoryPlugin{Factory: NewFactory()},
-		},
-		&plugins.Plugin{
-			Configuration:  conf,
-			Type:           plugins.ServiceRuntime,
-			Implementation: &services.ServiceRuntimePlugin{Runtime: NewRuntime()},
-		})
+		services.NewFactoryPlugin(conf, NewFactory()),
+		services.NewRuntimePlugin(conf, NewRuntime()))
 }

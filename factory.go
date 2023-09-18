@@ -59,7 +59,7 @@ func (service *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitRespons
 	if err != nil {
 		return nil, service.PluginLogger.WrapErrorf(err, "factory>init: cannot load spec")
 	}
-	service.PluginLogger.Debug("factory[init] initializing service with Spec: %v", service.Spec)
+	service.PluginLogger.Debugf("factory[init] initializing service with Spec: %v", service.Spec)
 
 	return &factoryv1.InitResponse{}, nil
 }
@@ -128,7 +128,7 @@ func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateR
 func (service *Factory) Refresh(req *factoryv1.RefreshRequest) (*factoryv1.RefreshResponse, error) {
 	defer service.PluginLogger.Catch()
 
-	service.PluginLogger.Debug("refreshing service: %v", req)
+	service.PluginLogger.Debugf("refreshing service: %v", req)
 
 	helper := golanghelpers.Go{Dir: path.Join(req.Destination, Source)}
 
