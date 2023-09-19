@@ -71,7 +71,7 @@ func (service *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResp
 				service.PluginLogger.Info("runtime[starting] proto change detected: %v", event)
 				err := helper.BufGenerate()
 				if err != nil {
-					service.PluginLogger.Error("runtime[starting] cannot generate proto: %v", err)
+					service.PluginLogger.Info("runtime[starting] cannot generate proto: %v", err)
 				}
 			} else {
 				service.PluginLogger.Info("runtime[starting] code change detected: %v", event)
@@ -82,7 +82,7 @@ func (service *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResp
 			service.PluginLogger.Info("runtime[starting] relevant changes to go program detected: killing")
 			err := service.Runner.Kill()
 			if err != nil {
-				service.PluginLogger.Error("runtime[starting] cannot kill go program: %v", err)
+				service.PluginLogger.Info("runtime[starting] cannot kill go program: %v", err)
 			}
 			service.status = services.Stopped
 		}

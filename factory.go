@@ -15,6 +15,7 @@ import (
 
 type Factory struct {
 	*Service
+	Blloe    bool
 	Identity *factoryv1.ServiceIdentity
 	Location string
 }
