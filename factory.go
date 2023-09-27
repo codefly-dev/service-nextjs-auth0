@@ -4,9 +4,10 @@ import (
 	"embed"
 	"fmt"
 	"github.com/hygge-io/hygge/pkg/configurations"
+	"github.com/hygge-io/hygge/pkg/core"
 	"github.com/hygge-io/hygge/pkg/plugins/helpers"
 	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
-	factoryv1 "github.com/hygge-io/hygge/proto/services/factory/v1"
+	factoryv1 "github.com/hygge-io/hygge/proto/v1/services/factory"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"path"
@@ -15,7 +16,6 @@ import (
 
 type Factory struct {
 	*Service
-	Blloe    bool
 	Identity *factoryv1.ServiceIdentity
 	Location string
 }
@@ -50,99 +50,72 @@ type CreateConfiguration struct {
 	Plugin      configurations.Plugin
 }
 
-func (service *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
-	defer service.PluginLogger.Catch()
+func (p *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
+	defer p.PluginLogger.Catch()
 
-	service.Identity = req.Identity
-	service.Location = req.Location
-
-	err := configurations.LoadSpec(req.Spec, &service.Spec)
-	if err != nil {
-		return nil, service.PluginLogger.WrapErrorf(err, "factory>init: cannot load spec")
-	}
-	service.PluginLogger.Debugf("factory[init] initializing service with Spec: %v", service.Spec)
+	p.PluginLogger.Debugf("factory.init: %v", req)
+	p.Identity = req.Identity
+	p.Location = req.Location
 
 	return &factoryv1.InitResponse{}, nil
 }
 
-func (service *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
-	defer service.PluginLogger.Catch()
+func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
+	defer p.PluginLogger.Catch()
 
 	converter := cases.Title(language.English)
 
 	// "Class name"
-	title := converter.String(service.Identity.Name)
+	title := converter.String(p.Identity.Name)
 	// Proto package
-	proto := fmt.Sprintf("%s.v1", service.Identity.Name)
+	proto := fmt.Sprintf("%s.v1", p.Identity.Name)
 
-	err := helpers.CopyTemplateDir(service.PluginLogger, fs, service.Location, CreateConfiguration{
-		Name:        service.Identity.Name,
-		Destination: service.Location,
-		Namespace:   service.Identity.Name,
+	err := helpers.CopyTemplateDir(p.PluginLogger, fs, p.Location, CreateConfiguration{
+		Name:        p.Identity.Name,
+		Destination: p.Location,
+		Namespace:   p.Identity.Name,
 		Service: CreateService{
-			Name:      service.Identity.Name,
+			Name:      p.Identity.Name,
 			TitleName: title,
 			Proto: Proto{
 				Package:      proto,
 				PackageAlias: strings.Replace(proto, ".", "_", -1),
 			},
 			Go: GenerateInstructions{
-				Package: service.Identity.Domain,
+				Package: p.Identity.Domain,
 			},
 		},
 		Plugin: conf,
 	})
+
 	if err != nil {
-		return nil, fmt.Errorf("factory>create: cannot copy from template dir %s for %s: %v", conf.Name(), service.Identity.Name, err)
+		return nil, fmt.Errorf("factory>create: cannot copy from template dir %s for %s: %v", conf.Name(), p.Identity.Name, err)
 	}
 
-	conf, err := configurations.LoadServiceFromDir(service.Location)
+	// Load default
+	err = configurations.LoadSpec(req.Spec, &p.Spec, core.BaseLogger(p.PluginLogger))
 	if err != nil {
-		return nil, fmt.Errorf("factory>create: cannot load service configuration: %v", err)
-	}
-	service.PluginLogger.Info("factory[create] loaded service configuration: %v", conf)
-	spec := Spec{Src: Source}
-
-	err = conf.AddSpec(spec)
-	if err != nil {
-		return nil, fmt.Errorf("factory>create: cannot add spec: %v", err)
-	}
-	err = conf.SaveAtDir(service.Location)
-	if err != nil {
-		return nil, fmt.Errorf("factory>create: cannot save service configuration: %v", err)
+		return nil, err
 	}
 
-	helper := golanghelpers.Go{Dir: path.Join(service.Location, Source)}
+	//	May override or check spec here
+	spec, err := configurations.SerializeSpec(p.Spec)
+	if err != nil {
+		return nil, err
+	}
+
+	helper := golanghelpers.Go{Dir: path.Join(p.Location, Source)}
 
 	err = helper.BufGenerate()
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: go helper: cannot run buf generate: %v", err)
 	}
-	err = helper.ModTidy()
+	err = helper.ModTidy(p.PluginLogger)
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: go helper: cannot run mod tidy: %v", err)
 	}
 
-	return &factoryv1.CreateResponse{}, nil
-}
-
-func (service *Factory) Refresh(req *factoryv1.RefreshRequest) (*factoryv1.RefreshResponse, error) {
-	defer service.PluginLogger.Catch()
-
-	service.PluginLogger.Debugf("refreshing service: %v", req)
-
-	helper := golanghelpers.Go{Dir: path.Join(req.Destination, Source)}
-
-	err := helper.BufGenerate()
-	if err != nil {
-		return nil, fmt.Errorf("go helper: cannot run buf generate: %v", err)
-	}
-	err = helper.ModTidy()
-	if err != nil {
-		return nil, fmt.Errorf("go helper: cannot run mod tidy: %v", err)
-	}
-
-	return &factoryv1.RefreshResponse{}, nil
+	return &factoryv1.CreateResponse{Spec: spec}, nil
 }
 
 //go:embed templates/*
