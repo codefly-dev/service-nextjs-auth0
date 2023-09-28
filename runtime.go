@@ -9,7 +9,6 @@ import (
 	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
 	"github.com/hygge-io/hygge/pkg/plugins/services"
 	runtimev1 "github.com/hygge-io/hygge/proto/v1/services/runtime"
-	"path"
 	"strings"
 )
 
@@ -48,16 +47,15 @@ func (p *Runtime) Init(req *runtimev1.InitRequest) (*runtimev1.InitResponse, err
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	dir := path.Join(p.Location, Source)
-	p.PluginLogger.Info("runtime[starting] go program in <%s> with spec: %v", dir, p.Spec)
+	p.PluginLogger.Info("runtime[starting] go program in <%s> with spec: %v", p.Location, p.Spec)
 
-	helper := golanghelpers.Go{Dir: path.Join(p.Location, Source)}
+	helper := golanghelpers.Go{Dir: p.Location}
 
 	// Exclude the proto
 	events := make(chan code.Change)
 	if p.Spec.Watch {
-		p.PluginLogger.Info("runtime[starting] watching for changes in <%s>", dir)
-		_, err := code.NewWatcher(p.PluginLogger, events, dir, []string{"."}, "api.proto")
+		p.PluginLogger.Info("runtime[starting] watching for changes in <%s>", p.Location)
+		_, err := code.NewWatcher(p.PluginLogger, events, p.Location, []string{"."}, "api.proto")
 		if err != nil {
 			return nil, p.PluginLogger.WrapErrorf(err, "cannot create code watcher")
 		}
@@ -90,7 +88,7 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	}()
 
 	p.Runner = &golanghelpers.Run{
-		Dir:           dir,
+		Dir:           p.Location,
 		Args:          []string{"main.go"},
 		ServiceLogger: plugins.NewServiceLogger(p.Name),
 		PluginLogger:  p.PluginLogger,
@@ -130,5 +128,21 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 	if err != nil {
 		return nil, core.WrapErrorf(err, "cannot tidy go.mod")
 	}
+	err = helper.BufGenerate()
+	if err != nil {
+		return nil, core.WrapErrorf(err, "cannot generate proto")
+	}
 	return &runtimev1.SyncResponse{}, nil
+}
+
+func (p *Runtime) Expose(req *runtimev1.ExposeRequest) (*runtimev1.ExposeResponse, error) {
+	defer p.PluginLogger.Catch()
+
+	api, err := services.GrpcAPI("api.proto")
+	if err != nil {
+		return nil, p.PluginLogger.WrapErrorf(err, "cannot load api")
+	}
+	return &runtimev1.ExposeResponse{
+		Apis: []*runtimev1.API{api},
+	}, nil
 }

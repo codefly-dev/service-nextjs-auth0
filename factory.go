@@ -10,7 +10,6 @@ import (
 	factoryv1 "github.com/hygge-io/hygge/proto/v1/services/factory"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-	"path"
 	"strings"
 )
 
@@ -104,7 +103,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, err
 	}
 
-	helper := golanghelpers.Go{Dir: path.Join(p.Location, Source)}
+	helper := golanghelpers.Go{Dir: p.Location}
 
 	err = helper.BufGenerate()
 	if err != nil {

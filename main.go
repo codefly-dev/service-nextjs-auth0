@@ -25,8 +25,6 @@ func NewService() *Service {
 	}
 }
 
-const Source = "src"
-
 type Spec struct {
 	Src   string `mapstructure:"src"`
 	Watch bool   `mapstructure:"watch"`
