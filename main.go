@@ -7,7 +7,7 @@ import (
 )
 
 var conf = configurations.Plugin{
-	Base:    "hygge-io/go-grpc",
+	Base:    "hygge-io/adapters",
 	Kind:    configurations.PluginService,
 	Version: "0.0.0",
 }
@@ -16,6 +16,8 @@ type Service struct {
 	PluginLogger *plugins.PluginLogger
 	Location     string
 	Spec         *Spec
+	GrpcEndpoint configurations.Endpoint
+	RestEndpoint *configurations.Endpoint
 }
 
 func NewService() *Service {
@@ -26,9 +28,25 @@ func NewService() *Service {
 }
 
 type Spec struct {
-	Src   string `mapstructure:"src"`
-	Watch bool   `mapstructure:"watch"`
-	Debug bool   `mapstructure:"debug"`
+	Debug              bool `yaml:"debug"` // Developer only
+	Watch              bool `yaml:"watch"`
+	WithDebugSymbols   bool `yaml:"with-debug-symbols"`
+	CreateHttpEndpoint bool `yaml:"create-rest-endpoint"`
+}
+
+func (p *Service) InitEndpoints() {
+	p.GrpcEndpoint = configurations.Endpoint{
+		Name:        configurations.GrpcApi,
+		Description: "Expose gRPC",
+	}
+
+	p.PluginLogger.DebugMe("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
+	if p.Spec.CreateHttpEndpoint {
+		p.RestEndpoint = &configurations.Endpoint{
+			Name:        configurations.RestApi,
+			Description: "Expose REST",
+		}
+	}
 }
 
 func main() {
