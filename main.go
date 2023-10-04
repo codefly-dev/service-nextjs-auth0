@@ -4,6 +4,7 @@ import (
 	"github.com/hygge-io/hygge/pkg/configurations"
 	"github.com/hygge-io/hygge/pkg/plugins"
 	"github.com/hygge-io/hygge/pkg/plugins/services"
+	"path"
 )
 
 var conf = configurations.Plugin{
@@ -18,6 +19,10 @@ type Service struct {
 	Spec         *Spec
 	GrpcEndpoint configurations.Endpoint
 	RestEndpoint *configurations.Endpoint
+}
+
+func (p *Service) Local(f string) string {
+	return path.Join(p.Location, f)
 }
 
 func NewService() *Service {
@@ -36,14 +41,14 @@ type Spec struct {
 
 func (p *Service) InitEndpoints() {
 	p.GrpcEndpoint = configurations.Endpoint{
-		Name:        configurations.GrpcApi,
+		Name:        configurations.Grpc,
 		Description: "Expose gRPC",
 	}
 
 	p.PluginLogger.DebugMe("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
 	if p.Spec.CreateHttpEndpoint {
 		p.RestEndpoint = &configurations.Endpoint{
-			Name:        configurations.RestApi,
+			Name:        configurations.Rest,
 			Description: "Expose REST",
 		}
 	}

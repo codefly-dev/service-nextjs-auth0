@@ -1,2 +1,2 @@
 echo Building go-grpc
-go build -o ~/.hygge/plugins/services/hygge.io/go-grpc:latest *.go
+go build -o ~/.codefly/plugins/services/codefly.ai/go-grpc:latest *.go

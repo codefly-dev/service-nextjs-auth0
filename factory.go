@@ -8,7 +8,6 @@ import (
 	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
 	"github.com/hygge-io/hygge/pkg/plugins/services"
 	factoryv1 "github.com/hygge-io/hygge/proto/v1/services/factory"
-	"path"
 )
 
 type Factory struct {
@@ -45,10 +44,6 @@ type CreateConfiguration struct {
 	Namespace   string
 	Service     CreateService
 	Plugin      configurations.Plugin
-}
-
-func (p *Factory) Local(f string) string {
-	return path.Join(p.Location, f)
 }
 
 func (p *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
