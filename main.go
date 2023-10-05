@@ -8,7 +8,7 @@ import (
 )
 
 var conf = configurations.Plugin{
-	Base:    "hygge-io/adapters",
+	Base:    "codefly.ai/go-grpc",
 	Kind:    configurations.PluginService,
 	Version: "0.0.0",
 }
