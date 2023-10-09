@@ -4,12 +4,18 @@ import (
 	"context"
 )
 
-type HyggeServer struct {
+type Configuration struct {
+	EndpointGrpc string
+	EndpointHttp string
+	Static       string
+}
+
+type Server struct {
 	grpc *GrpcServer
 	rest *RestServer
 }
 
-func NewServer(config *Configuration) (*HyggeServer, error) {
+func NewServer(config *Configuration) (*Server, error) {
 
 	grpc, err := NewGrpServer(config)
 	if err != nil {
@@ -19,13 +25,13 @@ func NewServer(config *Configuration) (*HyggeServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HyggeServer{
+	return &Server{
 		grpc: grpc,
 		rest: rest,
 	}, nil
 }
 
-func (server *HyggeServer) Start(ctx context.Context) error {
+func (server *Server) Start(ctx context.Context) error {
 	go func() {
 		err := server.rest.Run(ctx)
 		if err != nil {

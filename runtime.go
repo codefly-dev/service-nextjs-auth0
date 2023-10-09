@@ -4,10 +4,10 @@ import (
 	"context"
 	"github.com/hygge-io/hygge/pkg/configurations"
 	"github.com/hygge-io/hygge/pkg/core"
-	"github.com/hygge-io/hygge/pkg/network"
 	"github.com/hygge-io/hygge/pkg/plugins"
 	"github.com/hygge-io/hygge/pkg/plugins/helpers/code"
 	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
+	"github.com/hygge-io/hygge/pkg/plugins/network"
 	"github.com/hygge-io/hygge/pkg/plugins/services"
 	runtimev1 "github.com/hygge-io/hygge/proto/v1/services/runtime"
 	"github.com/pkg/errors"
@@ -52,7 +52,28 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 
 	p.PluginLogger.Info("runtime[init] initializing p at <%s> with Spec: %v", req.Location, p.Spec)
 
-	return &runtimev1.ConfigureResponse{}, nil
+	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
+	if err != nil {
+		return nil, core.Wrapf(err, "cannot create grpc api")
+	}
+	endpoints, err := services.WithApis(grpc, p.GrpcEndpoint)
+	if err != nil {
+		return nil, core.Wrapf(err, "cannot add gRPC api to endpoint")
+	}
+
+	if p.Spec.CreateHttpEndpoint {
+		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
+		if err != nil {
+			return nil, core.Wrapf(err, "cannot create REST api")
+		}
+		other, err := services.WithApis(rest, *p.RestEndpoint)
+		if err != nil {
+			return nil, core.Wrapf(err, "cannot add grpc api to endpoint")
+		}
+		endpoints = append(endpoints, other...)
+	}
+
+	return &runtimev1.ConfigureResponse{Endpoints: endpoints}, nil
 }
 
 func (p *Runtime) Init(req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
@@ -136,6 +157,10 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 	return &runtimev1.SyncResponse{}, nil
 }
 
+func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, error) {
+	return &runtimev1.BuildResponse{}, nil
+}
+
 func (p *Runtime) setupWatcher(events chan code.Change) error {
 	p.PluginLogger.Info("runtime[starting] watching for changes in <%s>", p.Location)
 	_, err := code.NewWatcher(p.PluginLogger, events, p.Location, []string{"."})
@@ -164,26 +189,20 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 	if p.RestEndpoint != nil {
 		endpoints = append(endpoints, *p.RestEndpoint)
 	}
-	pm := network.NewPortManager(p.Identity, endpoints...)
-	err := pm.Add(p.GrpcEndpoint)
+	pm := network.NewServicePortManager(p.Identity, endpoints...).WithHost("localhost").WithLogger(p.PluginLogger)
+	err := pm.Expose(p.GrpcEndpoint, network.Grpc())
 	if err != nil {
 		return nil, core.Wrapf(err, "cannot add grpc endpoint to network manager")
 	}
 	if p.RestEndpoint != nil {
-		err = pm.Add(*p.RestEndpoint)
+		err = pm.Expose(*p.RestEndpoint, network.Http())
 		if err != nil {
 			return nil, core.Wrapf(err, "cannot add rest to network manager")
 		}
 	}
-
-	mappings, err := pm.Reserve(core.BaseLogger(p.PluginLogger))
+	err = pm.Reserve()
 	if err != nil {
 		return nil, core.Wrapf(err, "cannot reserve ports")
 	}
-	mapping, err := pm.NetworkMapping(mappings, core.BaseLogger(p.PluginLogger))
-	if err != nil {
-		return nil, err
-	}
-	return mapping, nil
-
+	return pm.NetworkMapping()
 }

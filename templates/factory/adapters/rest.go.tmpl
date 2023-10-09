@@ -7,6 +7,8 @@ import (
 	gen "github.com/hygge-io/go-grpc/base/adapters/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"net/http"
+	"strings"
 )
 
 type RestServer struct {
@@ -28,5 +30,23 @@ func (s *RestServer) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	var handler http.Handler = gwMux
+
+	// Serve static files
+	if s.config.Static != "" {
+		fs := http.FileServer(http.Dir(s.config.Static))
+
+		// Custom handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// If path is root or starts with a known static file prefix, serve static files
+			if r.URL.Path == "/" || strings.HasSuffix(r.URL.Path, ".css") || strings.HasSuffix(r.URL.Path, ".js") {
+				fs.ServeHTTP(w, r)
+				return
+			}
+			// Otherwise, forward the request to the gRPC-Gateway
+			gwMux.ServeHTTP(w, r)
+		})
+	}
+
+	return http.ListenAndServe(s.config.EndpointHttp, handler)
 }

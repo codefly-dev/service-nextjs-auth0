@@ -4,5 +4,5 @@ use (
 	.
 	../../../hygge/hygge-cli
 	base
-	../../../../codefly.ai/sdk/go
+	../../../../codefly.dev/sdk/sdk-go
 )

@@ -4,13 +4,13 @@ import (
 	"github.com/hygge-io/hygge/pkg/configurations"
 	"github.com/hygge-io/hygge/pkg/plugins"
 	"github.com/hygge-io/hygge/pkg/plugins/services"
-	"path"
 )
 
 var conf = configurations.Plugin{
-	Base:    "codefly.ai/go-grpc",
-	Kind:    configurations.PluginService,
-	Version: "0.0.0",
+	Publisher:  "codefly.ai",
+	Identifier: "go-grpc",
+	Kind:       configurations.PluginService,
+	Version:    "0.0.0",
 }
 
 type Service struct {
@@ -19,10 +19,6 @@ type Service struct {
 	Spec         *Spec
 	GrpcEndpoint configurations.Endpoint
 	RestEndpoint *configurations.Endpoint
-}
-
-func (p *Service) Local(f string) string {
-	return path.Join(p.Location, f)
 }
 
 func NewService() *Service {
@@ -48,7 +44,7 @@ func (p *Service) InitEndpoints() {
 	p.PluginLogger.DebugMe("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
 	if p.Spec.CreateHttpEndpoint {
 		p.RestEndpoint = &configurations.Endpoint{
-			Name:        configurations.Rest,
+			Name:        configurations.Http,
 			Description: "Expose REST",
 		}
 	}

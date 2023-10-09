@@ -7,7 +7,9 @@ import (
 	"github.com/hygge-io/hygge/pkg/core"
 	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
 	"github.com/hygge-io/hygge/pkg/plugins/services"
+	"github.com/hygge-io/hygge/pkg/templates"
 	factoryv1 "github.com/hygge-io/hygge/proto/v1/services/factory"
+	"path"
 )
 
 type Factory struct {
@@ -38,12 +40,17 @@ type GenerateInstructions struct {
 	Package string
 }
 
+type Readme struct {
+	Summary string
+}
+
 type CreateConfiguration struct {
 	Name        string
 	Destination string
 	Namespace   string
 	Service     CreateService
 	Plugin      configurations.Plugin
+	Readme      Readme
 }
 
 func (p *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
@@ -61,10 +68,20 @@ func (p *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, err
 
 }
 
+func (p *Factory) Local(f string) string {
+	return path.Join(p.Location, f)
+}
+
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := core.CopyAndApplyTemplateToDir(p.PluginLogger, fs, p.Location, CreateConfiguration{})
+	err := templates.CopyAndApply(p.PluginLogger,
+		templates.NewEmbeddedFileSystem(fs),
+		core.NewDir("templates/factory"),
+		core.NewDir(p.Location),
+		CreateConfiguration{
+			Readme: Readme{Summary: p.Identity.Name},
+		})
 
 	if err != nil {
 		return nil, fmt.Errorf("factory>create: cannot copy from templates dir %s for %s: %v", conf.Name(), p.Identity.Name, err)
@@ -101,30 +118,8 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, fmt.Errorf("factory>create: go helper: cannot run mod tidy: %v", err)
 	}
 
-	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
-	if err != nil {
-		return nil, core.Wrapf(err, "cannot create grpc api")
-	}
-	endpoints, err := services.WithApis(grpc, p.GrpcEndpoint)
-	if err != nil {
-		return nil, core.Wrapf(err, "cannot add gRPC api to endpoint")
-	}
-
-	if p.Spec.CreateHttpEndpoint {
-		rest, err := services.NewRestApi(p.Local("adapters/v1/swagger/api.swagger.json"))
-		if err != nil {
-			return nil, core.Wrapf(err, "cannot create REST api")
-		}
-		other, err := services.WithApis(rest, *p.RestEndpoint)
-		if err != nil {
-			return nil, core.Wrapf(err, "cannot add grpc api to endpoint")
-		}
-		endpoints = append(endpoints, other...)
-	}
-
 	return &factoryv1.CreateResponse{
-		Endpoints: endpoints,
-		Spec:      spec,
+		Spec: spec,
 	}, nil
 }
 
