@@ -161,6 +161,14 @@ func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, 
 	return &runtimev1.BuildResponse{}, nil
 }
 
+func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.DeploymentResponse, error) {
+	return &runtimev1.DeploymentResponse{}, nil
+}
+
+/* Details
+
+ */
+
 func (p *Runtime) setupWatcher(events chan code.Change) error {
 	p.PluginLogger.Info("runtime[starting] watching for changes in <%s>", p.Location)
 	_, err := code.NewWatcher(p.PluginLogger, events, p.Location, []string{"."})

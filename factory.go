@@ -118,8 +118,30 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, fmt.Errorf("factory>create: go helper: cannot run mod tidy: %v", err)
 	}
 
+	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
+	if err != nil {
+		return nil, core.Wrapf(err, "cannot create grpc api")
+	}
+	endpoints, err := services.WithCreateApis(grpc, p.GrpcEndpoint)
+	if err != nil {
+		return nil, core.Wrapf(err, "cannot add gRPC api to endpoint")
+	}
+
+	if p.Spec.CreateHttpEndpoint {
+		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
+		if err != nil {
+			return nil, core.Wrapf(err, "cannot create REST api")
+		}
+		other, err := services.WithCreateApis(rest, *p.RestEndpoint)
+		if err != nil {
+			return nil, core.Wrapf(err, "cannot add grpc api to endpoint")
+		}
+		endpoints = append(endpoints, other...)
+	}
+
 	return &factoryv1.CreateResponse{
-		Spec: spec,
+		Spec:      spec,
+		Endpoints: endpoints,
 	}, nil
 }
 
