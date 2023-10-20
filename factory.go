@@ -56,7 +56,7 @@ type CreateConfiguration struct {
 func (p *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.PluginLogger.Debugf("factory.init: %v", req)
+	p.PluginLogger.Debugf("[factory::init] %v", req)
 	p.Identity = req.Identity
 	p.Location = req.Location
 
@@ -84,7 +84,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		})
 
 	if err != nil {
-		return nil, fmt.Errorf("factory>create: cannot copy from templates dir %s for %s: %v", conf.Name(), p.Identity.Name, err)
+		return nil, fmt.Errorf("[factory::create] cannot copy from templates dir %s for %s: %v", conf.Name(), p.Identity.Name, err)
 	}
 
 	out, err := shared.GenerateTree(p.Location, " ")

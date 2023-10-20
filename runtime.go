@@ -93,7 +93,7 @@ func (p *Runtime) Init(req *runtimev1.InitRequest) (*runtimev1.InitResponse, err
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.PluginLogger.Info("runtime[starting] go program in <%s> with spec: %v", p.Location, p.Spec)
+	p.PluginLogger.Info("runtime[starting] go program in <%s> with network mapping: %v", p.Location, req.NetworkMappings)
 
 	events := make(chan code.Change)
 
@@ -104,16 +104,10 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		}
 	}
 
-	env, err := plugins.GetEnvironment(req.Environment)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot get environment")
-	}
-	p.PluginLogger.DebugMe("ENV: %v", env.Variables)
-
 	p.Runner = &golanghelpers.Runner{
 		Dir:           p.Location,
 		Args:          []string{"main.go"},
-		Envs:          env.Variables,
+		Envs:          network.ConvertToEnvironmentVariables(req.NetworkMappings),
 		ServiceLogger: plugins.NewServiceLogger(p.Identity.Name),
 		PluginLogger:  p.PluginLogger,
 		Debug:         p.Spec.Debug,

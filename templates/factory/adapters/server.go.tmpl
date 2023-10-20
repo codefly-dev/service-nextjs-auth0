@@ -4,12 +4,6 @@ import (
 	"context"
 )
 
-type Configuration struct {
-	EndpointGrpc string
-	EndpointHttp string
-	Static       string
-}
-
 type Server struct {
 	grpc *GrpcServer
 	rest *RestServer

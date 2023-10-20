@@ -8,8 +8,13 @@ import (
 	"net"
 )
 
+type Configuration struct {
+	EndpointGrpc string
+	EndpointHttp string
+}
+
 type GrpcServer struct {
-	gen.UnsafeWebServer
+	gen.UnimplementedWebServer
 	configuration *Configuration
 	gRPC          *grpc.Server
 }
