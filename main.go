@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/hygge-io/hygge/pkg/configurations"
-	"github.com/hygge-io/hygge/pkg/plugins"
-	"github.com/hygge-io/hygge/pkg/plugins/services"
+	"github.com/codefly-dev/cli/pkg/plugins"
+	"github.com/codefly-dev/cli/pkg/plugins/services"
+	"github.com/codefly-dev/core/configurations"
 )
 
 var conf = configurations.Plugin{

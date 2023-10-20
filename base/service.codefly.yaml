@@ -1,0 +1,20 @@
+kind: service
+name: base
+namespace: default
+plugin:
+    kind: runtime::service
+    name: go-grpc
+    version: latest
+    publisher: codefly.ai
+endpoints:
+    - endpoint:
+        name: grpc
+        description: Expose gRPC
+      api:
+        protocol: grpc
+    - endpoint:
+        name: http
+        description: Expose REST
+      api:
+        protocol: http
+        framework: rest

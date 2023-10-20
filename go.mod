@@ -1,4 +1,4 @@
-module github.com/hygge-io/go-grpc
+module github.com/codefly-dev/go-grpc
 
 go 1.21.1
 

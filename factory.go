@@ -3,12 +3,12 @@ package main
 import (
 	"embed"
 	"fmt"
-	"github.com/hygge-io/hygge/pkg/configurations"
-	"github.com/hygge-io/hygge/pkg/core"
-	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
-	"github.com/hygge-io/hygge/pkg/plugins/services"
-	"github.com/hygge-io/hygge/pkg/templates"
-	factoryv1 "github.com/hygge-io/hygge/proto/v1/services/factory"
+	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
+	"github.com/codefly-dev/cli/pkg/plugins/services"
+	factoryv1 "github.com/codefly-dev/cli/proto/v1/services/factory"
+	"github.com/codefly-dev/core/configurations"
+	"github.com/codefly-dev/core/shared"
+	"github.com/codefly-dev/core/templates"
 	"path"
 )
 
@@ -77,8 +77,8 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 
 	err := templates.CopyAndApply(p.PluginLogger,
 		templates.NewEmbeddedFileSystem(fs),
-		core.NewDir("templates/factory"),
-		core.NewDir(p.Location),
+		shared.NewDir("templates/factory"),
+		shared.NewDir(p.Location),
 		CreateConfiguration{
 			Readme: Readme{Summary: p.Identity.Name},
 		})
@@ -87,14 +87,14 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, fmt.Errorf("factory>create: cannot copy from templates dir %s for %s: %v", conf.Name(), p.Identity.Name, err)
 	}
 
-	out, err := core.GenerateTree(p.Location, " ")
+	out, err := shared.GenerateTree(p.Location, " ")
 	if err != nil {
 		return nil, err
 	}
 	p.PluginLogger.Info("tree: %s", out)
 
 	// Load default
-	err = configurations.LoadSpec(req.Spec, &p.Spec, core.BaseLogger(p.PluginLogger))
+	err = configurations.LoadSpec(req.Spec, &p.Spec, shared.BaseLogger(p.PluginLogger))
 	if err != nil {
 		return nil, err
 	}
@@ -120,21 +120,21 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 
 	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot create grpc api")
+		return nil, shared.Wrapf(err, "cannot create grpc api")
 	}
 	endpoints, err := services.WithCreateApis(grpc, p.GrpcEndpoint)
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot add gRPC api to endpoint")
+		return nil, shared.Wrapf(err, "cannot add gRPC api to endpoint")
 	}
 
 	if p.Spec.CreateHttpEndpoint {
 		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
 		if err != nil {
-			return nil, core.Wrapf(err, "cannot create REST api")
+			return nil, shared.Wrapf(err, "cannot create REST api")
 		}
 		other, err := services.WithCreateApis(rest, *p.RestEndpoint)
 		if err != nil {
-			return nil, core.Wrapf(err, "cannot add grpc api to endpoint")
+			return nil, shared.Wrapf(err, "cannot add grpc api to endpoint")
 		}
 		endpoints = append(endpoints, other...)
 	}

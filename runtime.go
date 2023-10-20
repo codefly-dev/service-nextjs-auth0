@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	"github.com/hygge-io/hygge/pkg/configurations"
-	"github.com/hygge-io/hygge/pkg/core"
-	"github.com/hygge-io/hygge/pkg/plugins"
-	"github.com/hygge-io/hygge/pkg/plugins/helpers/code"
-	golanghelpers "github.com/hygge-io/hygge/pkg/plugins/helpers/go"
-	"github.com/hygge-io/hygge/pkg/plugins/network"
-	"github.com/hygge-io/hygge/pkg/plugins/services"
-	runtimev1 "github.com/hygge-io/hygge/proto/v1/services/runtime"
+	"github.com/codefly-dev/cli/pkg/plugins"
+	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
+	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
+	"github.com/codefly-dev/cli/pkg/plugins/network"
+	"github.com/codefly-dev/cli/pkg/plugins/services"
+	runtimev1 "github.com/codefly-dev/cli/proto/v1/services/runtime"
+	"github.com/codefly-dev/core/configurations"
+	"github.com/codefly-dev/core/shared"
 	"github.com/pkg/errors"
 	"path"
 	"strings"
@@ -39,12 +39,14 @@ func (p *Runtime) Local(f string) string {
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := configurations.LoadSpec(req.Spec, &p.Spec, core.BaseLogger(p.PluginLogger))
+	err := configurations.LoadSpec(req.Spec, &p.Spec, shared.BaseLogger(p.PluginLogger))
 	if err != nil {
 		return nil, errors.Wrapf(err, "factory[init]: cannot load spec")
 	}
 
-	p.PluginLogger.SetDebug(req.Debug) // For developers
+	if req.Debug {
+		p.PluginLogger.SetDebug() // For developers
+	}
 
 	p.Location = req.Location
 	p.Identity = req.Identity
@@ -54,21 +56,21 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 
 	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot create grpc api")
+		return nil, shared.Wrapf(err, "cannot create grpc api")
 	}
 	endpoints, err := services.WithApis(grpc, p.GrpcEndpoint)
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot add gRPC api to endpoint")
+		return nil, shared.Wrapf(err, "cannot add gRPC api to endpoint")
 	}
 
 	if p.Spec.CreateHttpEndpoint {
 		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
 		if err != nil {
-			return nil, core.Wrapf(err, "cannot create REST api")
+			return nil, shared.Wrapf(err, "cannot create REST api")
 		}
 		other, err := services.WithApis(rest, *p.RestEndpoint)
 		if err != nil {
-			return nil, core.Wrapf(err, "cannot add grpc api to endpoint")
+			return nil, shared.Wrapf(err, "cannot add grpc api to endpoint")
 		}
 		endpoints = append(endpoints, other...)
 	}
@@ -98,7 +100,7 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	if p.Spec.Watch {
 		err := p.setupWatcher(events)
 		if err != nil {
-			return nil, core.Wrapf(err, "cannot setup watcher")
+			return nil, shared.Wrapf(err, "cannot setup watcher")
 		}
 	}
 
@@ -148,11 +150,11 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 	helper := golanghelpers.Go{Dir: p.Location}
 	err := helper.ModTidy(p.PluginLogger)
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot tidy go.mod")
+		return nil, shared.Wrapf(err, "cannot tidy go.mod")
 	}
 	err = helper.BufGenerate(p.PluginLogger)
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot generate proto")
+		return nil, shared.Wrapf(err, "cannot generate proto")
 	}
 	return &runtimev1.SyncResponse{}, nil
 }
@@ -200,17 +202,17 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 	pm := network.NewServicePortManager(p.Identity, endpoints...).WithHost("localhost").WithLogger(p.PluginLogger)
 	err := pm.Expose(p.GrpcEndpoint, network.Grpc())
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot add grpc endpoint to network manager")
+		return nil, shared.Wrapf(err, "cannot add grpc endpoint to network manager")
 	}
 	if p.RestEndpoint != nil {
 		err = pm.Expose(*p.RestEndpoint, network.Http())
 		if err != nil {
-			return nil, core.Wrapf(err, "cannot add rest to network manager")
+			return nil, shared.Wrapf(err, "cannot add rest to network manager")
 		}
 	}
 	err = pm.Reserve()
 	if err != nil {
-		return nil, core.Wrapf(err, "cannot reserve ports")
+		return nil, shared.Wrapf(err, "cannot reserve ports")
 	}
 	return pm.NetworkMapping()
 }
