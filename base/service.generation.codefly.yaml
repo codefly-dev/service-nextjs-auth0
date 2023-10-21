@@ -1,0 +1,7 @@
+base:
+  name: Web
+  domain: github.com/codefly-dev/go-grpc/base
+ignores:
+  - service.codefly.yaml
+  - service.generation.codefly.yaml
+  - kreya

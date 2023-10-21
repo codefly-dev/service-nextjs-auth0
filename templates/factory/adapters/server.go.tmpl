@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 )
 
 type Server struct {
@@ -15,9 +16,12 @@ func NewServer(config *Configuration) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	rest, err := NewRestServer(config)
-	if err != nil {
-		return nil, err
+	var rest *RestServer
+	if config.EndpointHttp != "" {
+		rest, err = NewRestServer(config)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Server{
 		grpc: grpc,
@@ -26,11 +30,18 @@ func NewServer(config *Configuration) (*Server, error) {
 }
 
 func (server *Server) Start(ctx context.Context) error {
-	go func() {
-		err := server.rest.Run(ctx)
-		if err != nil {
-			panic(err)
-		}
-	}()
+	if server.rest != nil {
+		go func() {
+			err := server.rest.Run(ctx)
+			if err != nil {
+				panic(err)
+			}
+		}()
+	}
 	return server.grpc.Run(ctx)
+}
+
+func (server *Server) Stop() {
+	fmt.Println("Stopping server...")
+	server.grpc.gRPC.GracefulStop()
 }

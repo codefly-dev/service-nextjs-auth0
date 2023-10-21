@@ -20,6 +20,8 @@ type Runtime struct {
 	*Service
 	Identity *runtimev1.ServiceIdentity
 
+	ServiceLogger *plugins.ServiceLogger
+
 	// internal
 	Runner *golanghelpers.Runner
 	status services.InformationStatus
@@ -50,9 +52,12 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 
 	p.Location = req.Location
 	p.Identity = req.Identity
+
+	p.ServiceLogger = plugins.NewServiceLogger(p.Identity.Name)
+
 	p.InitEndpoints()
 
-	p.PluginLogger.Info("runtime[init] initializing p at <%s> with Spec: %v", req.Location, p.Spec)
+	p.PluginLogger.Info("%s -> spec: %v", p.Identity.Name, p.Spec)
 
 	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
 	if err != nil {
@@ -87,13 +92,14 @@ func (p *Runtime) Init(req *runtimev1.InitRequest) (*runtimev1.InitResponse, err
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot create default endpoint")
 	}
+
 	return &runtimev1.InitResponse{NetworkMappings: nets}, nil
 }
 
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.PluginLogger.Info("runtime[starting] go program in <%s> with network mapping: %v", p.Location, req.NetworkMappings)
+	p.PluginLogger.Info("%s: network mapping: %v", p.Identity.Name, req.NetworkMappings)
 
 	events := make(chan code.Change)
 
@@ -102,6 +108,7 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot setup watcher")
 		}
+		p.ServiceLogger.Message("-> Watching for code changes")
 	}
 
 	p.Runner = &golanghelpers.Runner{
@@ -130,8 +137,11 @@ func (p *Runtime) Information(req *runtimev1.InformationRequest) (*runtimev1.Inf
 func (p *Runtime) Stop(req *runtimev1.StopRequest) (*runtimev1.StopResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.PluginLogger.Debugf("runtime[stop] stopping service at <%s>", p.Location)
-	_ = p.Runner.Kill()
+	p.PluginLogger.Debugf("%s: stopping service", p.Identity.Name)
+	err := p.Runner.Kill()
+	if err != nil {
+		return nil, shared.Wrapf(err, "cannot kill go")
+	}
 
 	p.status = services.Stopped
 	return &runtimev1.StopResponse{}, nil
@@ -166,7 +176,7 @@ func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.Deploymen
  */
 
 func (p *Runtime) setupWatcher(events chan code.Change) error {
-	p.PluginLogger.Info("runtime[starting] watching for changes in <%s>", p.Location)
+	p.PluginLogger.Info("%s: watching for changes", p.Identity.Name)
 	_, err := code.NewWatcher(p.PluginLogger, events, p.Location, []string{"."})
 	if err != nil {
 		return err
@@ -178,8 +188,8 @@ func (p *Runtime) setupWatcher(events chan code.Change) error {
 				p.PluginLogger.Info("runtime[starting] proto change detected: %v | DO NOTHING FOR NOW", event)
 				continue
 			}
-			p.PluginLogger.Info("runtime[starting] relevant changes to go program detected: killing")
-			// Probably should lock
+			p.ServiceLogger.Message("-> Detected code changes: restarting")
+			p.PluginLogger.Info("runtime[starting] announcing to codefly desired restart")
 			p.Lock()
 			p.status = services.RestartWanted
 			p.Unlock()

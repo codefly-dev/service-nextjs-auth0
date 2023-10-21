@@ -41,7 +41,7 @@ func (p *Service) InitEndpoints() {
 		Description: "Expose gRPC",
 	}
 
-	p.PluginLogger.DebugMe("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
+	p.PluginLogger.Debugf("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
 	if p.Spec.CreateHttpEndpoint {
 		p.RestEndpoint = &configurations.Endpoint{
 			Name:        configurations.Http,

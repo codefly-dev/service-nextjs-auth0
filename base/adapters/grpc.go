@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	gen "github.com/codefly-dev/go-grpc/base/adapters/v1"
+	codefly "github.com/codefly-dev/sdk-go"
 	"google.golang.org/grpc"
 	"net"
 )
@@ -21,7 +22,7 @@ type GrpcServer struct {
 
 func (s *GrpcServer) Version(ctx context.Context, req *gen.VersionRequest) (*gen.VersionResponse, error) {
 	return &gen.VersionResponse{
-		Version: "v1",
+		Version: codefly.Version(),
 	}, nil
 }
 

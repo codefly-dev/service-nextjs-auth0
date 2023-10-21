@@ -10,6 +10,7 @@ import (
 	"github.com/codefly-dev/core/shared"
 	"github.com/codefly-dev/core/templates"
 	"path"
+	"strings"
 )
 
 type Factory struct {
@@ -48,6 +49,7 @@ type CreateConfiguration struct {
 	Name        string
 	Destination string
 	Namespace   string
+	Domain      string
 	Service     CreateService
 	Plugin      configurations.Plugin
 	Readme      Readme
@@ -80,7 +82,10 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		shared.NewDir("templates/factory"),
 		shared.NewDir(p.Location),
 		CreateConfiguration{
-			Readme: Readme{Summary: p.Identity.Name},
+			Name:      strings.Title(p.Identity.Name),
+			Domain:    p.Identity.Domain,
+			Namespace: p.Identity.Namespace,
+			Readme:    Readme{Summary: p.Identity.Name},
 		})
 
 	if err != nil {

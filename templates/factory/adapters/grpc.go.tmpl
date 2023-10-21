@@ -3,7 +3,8 @@ package adapters
 import (
 	"context"
 	"fmt"
-	gen "github.com/codefly-dev/go-grpc/base/adapters/v1"
+	gen "{{.Domain}}/adapters/v1"
+	codefly "github.com/codefly-dev/sdk-go"
 	"google.golang.org/grpc"
 	"net"
 )
@@ -14,14 +15,14 @@ type Configuration struct {
 }
 
 type GrpcServer struct {
-	gen.UnimplementedWebServer
+	gen.Unimplemented{{.Name}}Server
 	configuration *Configuration
 	gRPC          *grpc.Server
 }
 
 func (s *GrpcServer) Version(ctx context.Context, req *gen.VersionRequest) (*gen.VersionResponse, error) {
 	return &gen.VersionResponse{
-		Version: "v1",
+		Version: codefly.Version(),
 	}, nil
 }
 
@@ -31,7 +32,7 @@ func NewGrpServer(c *Configuration) (*GrpcServer, error) {
 		configuration: c,
 		gRPC:          grpcServer,
 	}
-	gen.RegisterWebServer(grpcServer, &s)
+	gen.Register{{.Name}}Server(grpcServer, &s)
 	return &s, nil
 }
 

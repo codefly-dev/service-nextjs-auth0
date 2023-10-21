@@ -2,7 +2,7 @@ version: v1
 managed:
   enabled: true
   go_package_prefix:
-    default: github.com/codefly-dev/go-grpc/base/gen
+    default: {{.Domain}}/gen
     except:
       - buf.build/googleapis/googleapis
 plugins:
