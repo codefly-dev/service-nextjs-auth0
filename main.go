@@ -35,21 +35,6 @@ type Spec struct {
 	CreateHttpEndpoint bool `yaml:"create-rest-endpoint"`
 }
 
-func (p *Service) InitEndpoints() {
-	p.GrpcEndpoint = configurations.Endpoint{
-		Name:        configurations.Grpc,
-		Description: "Expose gRPC",
-	}
-
-	p.PluginLogger.Debugf("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
-	if p.Spec.CreateHttpEndpoint {
-		p.RestEndpoint = &configurations.Endpoint{
-			Name:        configurations.Http,
-			Description: "Expose REST",
-		}
-	}
-}
-
 func main() {
 	plugins.Register(
 		services.NewFactoryPlugin(conf.Of(configurations.PluginFactoryService), NewFactory()),

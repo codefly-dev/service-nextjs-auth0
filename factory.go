@@ -132,21 +132,21 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot create grpc api")
 	}
-	endpoints, err := services.WithApis(grpc, p.GrpcEndpoint)
+	endpoint, err := services.WithApi(&p.GrpcEndpoint, grpc)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot add gRPC api to endpoint")
 	}
-
-	if p.Spec.CreateHttpEndpoint {
+	endpoints := []*corev1.Endpoint{endpoint}
+	if p.RestEndpoint != nil {
 		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot create REST api")
 		}
-		other, err := services.WithApis(rest, *p.RestEndpoint)
+		r, err := services.WithApi(p.RestEndpoint, rest)
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot add grpc api to endpoint")
 		}
-		endpoints = append(endpoints, other...)
+		endpoints = append(endpoints, r)
 	}
 
 	return &factoryv1.CreateResponse{
@@ -162,6 +162,23 @@ func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateRespons
 		return nil, fmt.Errorf("factory>update: go helper: cannot run update: %v", err)
 	}
 	return &factoryv1.UpdateResponse{}, nil
+}
+
+func (p *Service) InitEndpoints() {
+	p.GrpcEndpoint = configurations.Endpoint{
+		Name:        configurations.Grpc,
+		Api:         &configurations.Api{Protocol: configurations.Grpc},
+		Description: "Expose gRPC",
+	}
+
+	p.PluginLogger.Debugf("initEndpoints: %v", p.Spec.CreateHttpEndpoint)
+	if p.Spec.CreateHttpEndpoint {
+		p.RestEndpoint = &configurations.Endpoint{
+			Name:        configurations.Http,
+			Api:         &configurations.Api{Protocol: configurations.Http, Framework: configurations.RestFramework},
+			Description: "Expose REST",
+		}
+	}
 }
 
 //go:embed templates/factory

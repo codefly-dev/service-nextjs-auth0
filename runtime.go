@@ -8,6 +8,7 @@ import (
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/network"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
+	corev1 "github.com/codefly-dev/cli/proto/v1/core"
 	runtimev1 "github.com/codefly-dev/cli/proto/v1/services/runtime"
 	"github.com/codefly-dev/core/configurations"
 	"github.com/codefly-dev/core/shared"
@@ -65,29 +66,29 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 	}
 	p.ServiceLogger = plugins.NewServiceLogger(p.Identity.Name)
 
-	p.InitEndpoints()
-
-	p.PluginLogger.Info("%s -> configure", p.Identity.Name)
+	p.HydrateEndpoints()
 
 	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot create grpc api")
 	}
-	endpoints, err := services.WithApis(grpc, p.GrpcEndpoint)
+	endpoint, err := services.WithApi(&p.GrpcEndpoint, grpc)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot add gRPC api to endpoint")
 	}
+	endpoints := []*corev1.Endpoint{endpoint}
 
-	if p.Spec.CreateHttpEndpoint {
+	if p.RestEndpoint != nil {
+		p.PluginLogger.Info("%s -> configure", p.RestEndpoint)
 		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot create REST api")
 		}
-		other, err := services.WithApis(rest, *p.RestEndpoint)
+		r, err := services.WithApi(p.RestEndpoint, rest)
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot add grpc api to endpoint")
 		}
-		endpoints = append(endpoints, other...)
+		endpoints = append(endpoints, r)
 	}
 
 	return &runtimev1.ConfigureResponse{Endpoints: endpoints}, nil
@@ -278,4 +279,26 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 		return nil, shared.Wrapf(err, "cannot reserve ports")
 	}
 	return pm.NetworkMapping()
+}
+
+func (p *Runtime) HydrateEndpoints() {
+	for _, ep := range p.Configuration.Endpoints {
+		switch ep.Api.Protocol {
+		case configurations.Grpc:
+			p.GrpcEndpoint = configurations.Endpoint{
+				Name:        configurations.Grpc,
+				Api:         ep.Api,
+				Public:      ep.Endpoint.Public,
+				Description: ep.Endpoint.Description,
+			}
+		case configurations.Http:
+			p.RestEndpoint = &configurations.Endpoint{
+				Name:        configurations.Http,
+				Api:         ep.Api,
+				Public:      ep.Endpoint.Public,
+				Description: ep.Endpoint.Description,
+			}
+		}
+
+	}
 }
