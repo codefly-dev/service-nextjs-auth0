@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"net/http"
 	gen "{{.Domain}}/adapters/v1"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -28,5 +29,5 @@ func (s *RestServer) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	return http.ListenAndServe(s.config.EndpointHttp, gwMux)
 }

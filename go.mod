@@ -7,6 +7,7 @@ require golang.org/x/text v0.13.0
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
 	github.com/a8m/tree v0.0.0-20230208161321-36ae24ddad15 // indirect
+	github.com/codefly-dev/sdk-go v0.0.6 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect

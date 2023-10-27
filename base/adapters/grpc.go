@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"github.com/bufbuild/protovalidate-go"
 	gen "github.com/codefly-dev/go-grpc/base/adapters/v1"
 	codefly "github.com/codefly-dev/sdk-go"
 	"google.golang.org/grpc"
@@ -18,6 +19,7 @@ type GrpcServer struct {
 	gen.UnimplementedWebServer
 	configuration *Configuration
 	gRPC          *grpc.Server
+	validator     *protovalidate.Validator
 }
 
 func (s *GrpcServer) Version(ctx context.Context, req *gen.VersionRequest) (*gen.VersionResponse, error) {
@@ -28,9 +30,15 @@ func (s *GrpcServer) Version(ctx context.Context, req *gen.VersionRequest) (*gen
 
 func NewGrpServer(c *Configuration) (*GrpcServer, error) {
 	grpcServer := grpc.NewServer()
+	v, err := protovalidate.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create validator: %w", err)
+	}
+
 	s := GrpcServer{
 		configuration: c,
 		gRPC:          grpcServer,
+		validator:     v,
 	}
 	gen.RegisterWebServer(grpcServer, &s)
 	return &s, nil

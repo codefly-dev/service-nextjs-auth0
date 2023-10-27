@@ -7,6 +7,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"net/http"
 )
 
 type RestServer struct {
@@ -28,5 +29,5 @@ func (s *RestServer) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	return http.ListenAndServe(s.config.EndpointHttp, gwMux)
 }

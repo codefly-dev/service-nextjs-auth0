@@ -5,6 +5,7 @@ import (
 	"fmt"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
+	corev1 "github.com/codefly-dev/cli/proto/v1/core"
 	factoryv1 "github.com/codefly-dev/cli/proto/v1/services/factory"
 	"github.com/codefly-dev/core/configurations"
 	"github.com/codefly-dev/core/shared"
@@ -62,7 +63,7 @@ func (p *Factory) Init(req *factoryv1.InitRequest) (*factoryv1.InitResponse, err
 	p.Identity = req.Identity
 	p.Location = req.Location
 
-	return &factoryv1.InitResponse{RuntimeOptions: []*factoryv1.RuntimeOption{
+	return &factoryv1.InitResponse{RuntimeOptions: []*corev1.Option{
 		services.NewRuntimeOption[bool]("watch", "🕵️Automatically restart on code changes", true),
 		services.NewRuntimeOption[bool]("with-debug-symbols", "🕵️Run with debug symbols", true),
 		services.NewRuntimeOption[bool]("create-rest-endpoint", "🚀Add automatically generated REST endpoint (useful for the API Gateway pattern)", true),
@@ -76,20 +77,24 @@ func (p *Factory) Local(f string) string {
 
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
+	create := CreateConfiguration{
+		Name:      strings.Title(p.Identity.Name),
+		Domain:    p.Identity.Domain,
+		Namespace: p.Identity.Namespace,
+		Readme:    Readme{Summary: p.Identity.Name},
+	}
 
-	err := templates.CopyAndApply(p.PluginLogger,
-		templates.NewEmbeddedFileSystem(fs),
-		shared.NewDir("templates/factory"),
-		shared.NewDir(p.Location),
-		CreateConfiguration{
-			Name:      strings.Title(p.Identity.Name),
-			Domain:    p.Identity.Domain,
-			Namespace: p.Identity.Namespace,
-			Readme:    Readme{Summary: p.Identity.Name},
-		})
-
+	// Templatize as usual
+	err := templates.CopyAndApply(p.PluginLogger, templates.NewEmbeddedFileSystem(factory), shared.NewDir("templates/factory"),
+		shared.NewDir(p.Location), create)
 	if err != nil {
-		return nil, fmt.Errorf("[factory::create] cannot copy from templates dir %s for %s: %v", conf.Name(), p.Identity.Name, err)
+		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
+	}
+
+	err = templates.CopyAndApply(p.PluginLogger, templates.NewEmbeddedFileSystem(builder), shared.NewDir("templates/builder"),
+		shared.NewDir(p.Local("builder")), nil)
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
 	}
 
 	out, err := shared.GenerateTree(p.Location, " ")
@@ -127,7 +132,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot create grpc api")
 	}
-	endpoints, err := services.WithCreateApis(grpc, p.GrpcEndpoint)
+	endpoints, err := services.WithApis(grpc, p.GrpcEndpoint)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot add gRPC api to endpoint")
 	}
@@ -137,7 +142,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot create REST api")
 		}
-		other, err := services.WithCreateApis(rest, *p.RestEndpoint)
+		other, err := services.WithApis(rest, *p.RestEndpoint)
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot add grpc api to endpoint")
 		}
@@ -150,5 +155,17 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	}, nil
 }
 
-//go:embed templates/*
-var fs embed.FS
+func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
+	helper := golanghelpers.Go{Dir: p.Location}
+	err := helper.Update(p.PluginLogger)
+	if err != nil {
+		return nil, fmt.Errorf("factory>update: go helper: cannot run update: %v", err)
+	}
+	return &factoryv1.UpdateResponse{}, nil
+}
+
+//go:embed templates/factory
+var factory embed.FS
+
+//go:embed templates/builder
+var builder embed.FS
