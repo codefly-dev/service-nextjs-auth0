@@ -292,15 +292,15 @@ func (p *Runtime) HydrateEndpoints() {
 			p.GrpcEndpoint = configurations.Endpoint{
 				Name:        configurations.Grpc,
 				Api:         ep.Api,
-				Public:      ep.Endpoint.Public,
-				Description: ep.Endpoint.Description,
+				Public:      ep.Public,
+				Description: ep.Description,
 			}
 		case configurations.Http:
 			p.RestEndpoint = &configurations.Endpoint{
 				Name:        configurations.Http,
 				Api:         ep.Api,
-				Public:      ep.Endpoint.Public,
-				Description: ep.Endpoint.Description,
+				Public:      ep.Public,
+				Description: ep.Description,
 			}
 		}
 
