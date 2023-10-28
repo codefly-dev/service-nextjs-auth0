@@ -79,7 +79,6 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 	endpoints := []*corev1.Endpoint{endpoint}
 
 	if p.RestEndpoint != nil {
-		p.PluginLogger.Info("%s -> configure", p.RestEndpoint)
 		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot create REST api")
@@ -219,6 +218,11 @@ func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, 
 
 func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.DeploymentResponse, error) {
 	return &runtimev1.DeploymentResponse{}, nil
+}
+
+func (p *Runtime) Communicate(req *corev1.Question) (*corev1.Answer, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 /* Details
