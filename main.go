@@ -6,6 +6,7 @@ import (
 	"github.com/codefly-dev/core/configurations"
 )
 
+// Plugin version
 var conf = configurations.Plugin{
 	Publisher:  "codefly.ai",
 	Identifier: "go-grpc",
@@ -13,26 +14,29 @@ var conf = configurations.Plugin{
 	Version:    "0.0.0",
 }
 
+type Spec struct {
+	Debug              bool `yaml:"debug"` // Developer only
+	Watch              bool `yaml:"watch"`
+	WithDebugSymbols   bool `yaml:"with-debug-symbols"`
+	CreateHttpEndpoint bool `yaml:"create-rest-endpoint"`
+}
+
 type Service struct {
-	PluginLogger *plugins.PluginLogger
-	Location     string
-	Spec         *Spec
+	Base *services.Service
+
+	// Spec
+	*Spec
+
+	// Endpoints
 	GrpcEndpoint configurations.Endpoint
 	RestEndpoint *configurations.Endpoint
 }
 
 func NewService() *Service {
 	return &Service{
-		PluginLogger: plugins.NewPluginLogger(conf.Name()),
-		Spec:         &Spec{},
+		Base: services.NewService(conf.Of(configurations.PluginService)),
+		Spec: &Spec{},
 	}
-}
-
-type Spec struct {
-	Debug              bool `yaml:"debug"` // Developer only
-	Watch              bool `yaml:"watch"`
-	WithDebugSymbols   bool `yaml:"with-debug-symbols"`
-	CreateHttpEndpoint bool `yaml:"create-rest-endpoint"`
 }
 
 func main() {

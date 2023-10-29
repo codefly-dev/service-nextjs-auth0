@@ -9,66 +9,37 @@ import (
 	"github.com/codefly-dev/cli/pkg/plugins/network"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
+	v1 "github.com/codefly-dev/cli/proto/v1/services"
 	runtimev1 "github.com/codefly-dev/cli/proto/v1/services/runtime"
 	"github.com/codefly-dev/core/configurations"
 	"github.com/codefly-dev/core/shared"
 	"github.com/pkg/errors"
-	"path"
 	"strings"
-	"sync"
 )
 
 type Runtime struct {
 	*Service
-	Identity *runtimev1.ServiceIdentity
-
-	ServiceLogger *plugins.ServiceLogger
 
 	// internal
 	Runner *golanghelpers.Runner
-	status services.InformationStatus
-
-	mutex         *sync.Mutex
-	events        chan code.Change
-	watcher       *code.Watcher
-	Configuration *configurations.Service
 }
 
 func NewRuntime() *Runtime {
 	return &Runtime{
 		Service: NewService(),
-		mutex:   &sync.Mutex{},
 	}
 }
 
-func (p *Runtime) Local(f string) string {
-	return path.Join(p.Location, f)
-}
+func (p *Runtime) Init(req *v1.InitRequest) (*runtimev1.InitResponse, error) {
+	defer p.Base.PluginLogger.Catch()
 
-func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
-	defer p.PluginLogger.Catch()
-
-	err := configurations.LoadSpec(req.Spec, &p.Spec, shared.BaseLogger(p.PluginLogger))
+	err := p.Base.Init(req, &p.Spec)
 	if err != nil {
-		return nil, errors.Wrapf(err, "factory[init]: cannot load spec")
+		return nil, err
 	}
-
-	if req.Debug {
-		p.PluginLogger.SetDebug() // For developers
-	}
-
-	p.Location = req.Location
-	p.Identity = req.Identity
-
-	p.Configuration, err = configurations.LoadFromDir[configurations.Service](p.Location)
-	if err != nil {
-		return nil, shared.Wrapf(err, "cannot load service configuration")
-	}
-	p.ServiceLogger = plugins.NewServiceLogger(p.Identity.Name)
-
 	p.HydrateEndpoints()
 
-	grpc, err := services.NewGrpcApi(p.Local("api.proto"))
+	grpc, err := services.NewGrpcApi(p.Base.Local("api.proto"))
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot create grpc api")
 	}
@@ -79,7 +50,7 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 	endpoints := []*corev1.Endpoint{endpoint}
 
 	if p.RestEndpoint != nil {
-		rest, err := services.NewOpenApi(p.Local("adapters/v1/swagger/api.swagger.json"))
+		rest, err := services.NewOpenApi(p.Base.Local("adapters/v1/swagger/api.swagger.json"))
 		if err != nil {
 			return nil, shared.Wrapf(err, "cannot create REST api")
 		}
@@ -89,43 +60,38 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 		}
 		endpoints = append(endpoints, r)
 	}
+	return &runtimev1.InitResponse{
+		Version:   p.Base.Version(),
+		Endpoints: endpoints,
+	}, nil
 
-	return &runtimev1.ConfigureResponse{Endpoints: endpoints}, nil
 }
 
-func (p *Runtime) Init(req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
-	defer p.PluginLogger.Catch()
+func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
+	defer p.Base.PluginLogger.Catch()
 
-	p.status = services.Init
-
-	p.PluginLogger.TODO("refactor events")
-	p.PluginLogger.Debugf("creating event channel")
-	p.events = make(chan code.Change)
+	p.Base.PluginLogger.TODO("refactor events")
 
 	p.Runner = &golanghelpers.Runner{
-		Dir:           p.Location,
+		Dir:           p.Base.Location,
 		Args:          []string{"main.go"},
-		ServiceLogger: plugins.NewServiceLogger(p.Identity.Name),
-		PluginLogger:  p.PluginLogger,
+		ServiceLogger: plugins.NewServiceLogger(p.Base.Identity.Name),
+		PluginLogger:  p.Base.PluginLogger,
 		Debug:         p.Spec.Debug,
 	}
 
 	if p.Spec.Watch {
-		p.PluginLogger.Debugf("watching for code changes")
-		err := p.setupWatcher()
+		conf := services.NewWatchConfiguration([]string{".", "adapters"}, "service.codefly.yaml")
+		err := p.Base.SetupWatcher(conf, p.EventHandler)
 		if err != nil {
-			p.PluginLogger.Warn("error in watcher")
+			p.Base.PluginLogger.Warn("error in watcher")
 		}
-		p.ServiceLogger.Info("-> Watching for code changes")
 	}
 
 	err := p.Runner.Init(context.Background())
 	if err != nil {
-		p.ServiceLogger.Info("-> Cannot init: %v", err)
-		return &runtimev1.InitResponse{Status: &runtimev1.InitStatus{
-			Status:  runtimev1.InitStatus_ERROR,
-			Message: err.Error(),
-		}}, nil
+		p.Base.ServiceLogger.Info("-> Cannot init: %v", err)
+		return &runtimev1.ConfigureResponse{Status: services.InitError(err)}, nil
 	}
 
 	nets, err := p.Network()
@@ -133,20 +99,18 @@ func (p *Runtime) Init(req *runtimev1.InitRequest) (*runtimev1.InitResponse, err
 		return nil, errors.Wrapf(err, "cannot create default endpoint")
 	}
 
-	return &runtimev1.InitResponse{
+	return &runtimev1.ConfigureResponse{
+		Status:          services.InitReady(),
 		NetworkMappings: nets,
-		Status: &runtimev1.InitStatus{
-			Status: runtimev1.InitStatus_READY,
-		},
 	}, nil
 }
 
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
-	defer p.PluginLogger.Catch()
+	defer p.Base.PluginLogger.Catch()
 
 	ctx := context.Background()
 
-	p.PluginLogger.Info("%s: network mapping: %v", p.Identity.Name, req.NetworkMappings)
+	p.Base.PluginLogger.Info("network mapping: %v", req.NetworkMappings)
 
 	p.Runner.Envs = network.ConvertToEnvironmentVariables(req.NetworkMappings)
 
@@ -155,43 +119,39 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		return nil, errors.Wrapf(err, "cannot run go")
 	}
 
-	p.status = services.Started
 	return &runtimev1.StartResponse{
-		Status: &runtimev1.StartStatus{
-			Status: runtimev1.StartStatus_STARTED,
-		},
+		Status:   p.Base.StartSuccess(),
 		Trackers: []*runtimev1.Tracker{tracker.Proto()},
 	}, nil
 }
 
 func (p *Runtime) Information(req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
-	return &runtimev1.InformationResponse{Status: p.status}, nil
+	return &runtimev1.InformationResponse{Status: p.Base.Status}, nil
 }
 
 func (p *Runtime) Stop(req *runtimev1.StopRequest) (*runtimev1.StopResponse, error) {
-	defer p.PluginLogger.Catch()
+	defer p.Base.PluginLogger.Catch()
 
-	p.PluginLogger.Debugf("%s: stopping service", p.Identity.Name)
+	p.Base.PluginLogger.Debugf("stopping service")
 	err := p.Runner.Kill()
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot kill go")
 	}
 
-	p.status = services.Stopped
-	close(p.events)
+	p.Base.Stop()
 	return &runtimev1.StopResponse{}, nil
 }
 
 func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, error) {
-	defer p.PluginLogger.Catch()
+	defer p.Base.PluginLogger.Catch()
 
-	p.PluginLogger.Debugf("running sync: %v", p.Location)
-	helper := golanghelpers.Go{Dir: p.Location}
-	err := helper.ModTidy(p.PluginLogger)
+	p.Base.PluginLogger.Debugf("running sync: %v", p.Base.Location)
+	helper := golanghelpers.Go{Dir: p.Base.Location}
+	err := helper.ModTidy(p.Base.PluginLogger)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot tidy go.mod")
 	}
-	err = helper.BufGenerate(p.PluginLogger)
+	err = helper.BufGenerate(p.Base.PluginLogger)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot generate proto")
 	}
@@ -199,19 +159,19 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 }
 
 func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, error) {
-	p.PluginLogger.Debugf("building docker image")
+	p.Base.PluginLogger.Debugf("building docker image")
 	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
-		Root:  p.Location,
-		Image: p.Identity.Name,
-		Tag:   p.Configuration.Version,
+		Root:  p.Base.Location,
+		Image: p.Base.Identity.Name,
+		Tag:   p.Base.Configuration.Version,
 	})
 	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot create builder")
+		return nil, p.Base.PluginLogger.Wrapf(err, "cannot create builder")
 	}
-	builder.WithLogger(p.PluginLogger)
+	builder.WithLogger(p.Base.PluginLogger)
 	_, err = builder.Build()
 	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot build image")
+		return nil, p.Base.PluginLogger.Wrapf(err, "cannot build image")
 	}
 	return &runtimev1.BuildResponse{}, nil
 }
@@ -229,36 +189,22 @@ func (p *Runtime) Communicate(req *corev1.Question) (*corev1.Answer, error) {
 
  */
 
-func (p *Runtime) setupWatcher() error {
-	p.PluginLogger.DebugMe("%s: watching for changes", p.Identity.Name)
-	var err error
-	p.watcher, err = code.NewWatcher(p.PluginLogger, p.events, p.Location, []string{".", "adapters"}, "service.codefly.yaml")
+func (p *Runtime) EventHandler(event code.Change) error {
+	p.Base.PluginLogger.DebugMe("got an event: %v", event)
+	if strings.Contains(event.Path, "proto") {
+		_, err := p.Sync(&runtimev1.SyncRequest{})
+		if err != nil {
+			p.Base.PluginLogger.Warn("cannot sync proto: %v", err)
+		}
+	}
+	err := p.Runner.Init(context.Background())
 	if err != nil {
+		p.Base.ServiceLogger.Info("-> Detected code changes: still cannot restart: %v", err)
 		return err
 	}
-	go p.watcher.Start()
-
-	go func() {
-		for event := range p.events {
-			p.PluginLogger.DebugMe("got an event: %v", event)
-			if strings.Contains(event.Path, "proto") {
-				_, err := p.Sync(&runtimev1.SyncRequest{})
-				if err != nil {
-					p.PluginLogger.Warn("cannot sync proto: %v", err)
-				}
-			}
-			err := p.Runner.Init(context.Background())
-			if err != nil {
-				p.ServiceLogger.Info("-> Detected code changes: still cannot restart: %v", err)
-				continue
-			}
-			p.ServiceLogger.Info("-> Detected working code changes: restarting")
-			p.PluginLogger.DebugMe("detected working code changes: restarting")
-			p.mutex.Lock()
-			p.status = services.RestartWanted
-			p.mutex.Unlock()
-		}
-	}()
+	p.Base.ServiceLogger.Info("-> Detected working code changes: restarting")
+	p.Base.PluginLogger.DebugMe("detected working code changes: restarting")
+	p.Base.WantRestart()
 	return nil
 }
 
@@ -267,7 +213,7 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 	if p.RestEndpoint != nil {
 		endpoints = append(endpoints, *p.RestEndpoint)
 	}
-	pm := network.NewServicePortManager(p.Identity, endpoints...).WithHost("localhost").WithLogger(p.PluginLogger)
+	pm := network.NewServicePortManager(p.Base.Identity, endpoints...).WithHost("localhost").WithLogger(p.Base.PluginLogger)
 	err := pm.Expose(p.GrpcEndpoint, network.Grpc())
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot add grpc endpoint to network manager")
@@ -286,7 +232,7 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 }
 
 func (p *Runtime) HydrateEndpoints() {
-	for _, ep := range p.Configuration.Endpoints {
+	for _, ep := range p.Base.Configuration.Endpoints {
 		switch ep.Api.Protocol {
 		case configurations.Grpc:
 			p.GrpcEndpoint = configurations.Endpoint{
