@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	"github.com/codefly-dev/cli/pkg/plugins/communicate"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
@@ -16,6 +17,9 @@ import (
 
 type Factory struct {
 	*Service
+
+	// Communication
+	create *communicate.ClientContext
 }
 
 func NewFactory() *Factory {
@@ -54,6 +58,17 @@ type CreateConfiguration struct {
 	Readme      Readme
 }
 
+func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
+	client := communicate.NewClientContext(communicate.Create, p.Base.PluginLogger)
+	err := client.NewSequence(
+		client.NewConfirm(&corev1.Message{Name: "confirm"}, true),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
 func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 	defer p.Base.PluginLogger.Catch()
 
@@ -62,15 +77,32 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 		return nil, err
 	}
 
-	return &factoryv1.InitResponse{}, nil
-	//RuntimeOptions: []*corev1.Option{
-	//	services.NewRuntimeOption[bool]("watch", "🕵️Automatically restart on code changes", true),
-	//	services.NewRuntimeOption[bool]("with-debug-symbols", "🕵️Run with debug symbols", true),
-	//	services.NewRuntimeOption[bool]("create-rest-endpoint", "🚀Add automatically generated REST endpoint (useful for the API Gateway pattern)", true),
+	p.create, err = p.NewCreateCommunicate()
+	if err != nil {
+		return nil, err
+	}
+
+	channels, err := p.Base.WithCommunications(services.NewChannel(communicate.Create, p.create))
+	if err != nil {
+		return nil, err
+	}
+
+	return &factoryv1.InitResponse{
+		Version:  p.Base.Version(),
+		Channels: channels,
+	}, nil
 }
 
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.Base.PluginLogger.Catch()
+
+	// Make sure the communication for create has been done successfully
+	if !p.create.Ready() {
+		return nil, p.Base.PluginLogger.Errorf("create: communication not ready")
+	}
+
+	p.Base.ServiceLogger.Info("Creating service")
+
 	create := CreateConfiguration{
 		Name:      strings.Title(p.Base.Identity.Name),
 		Domain:    p.Base.Identity.Domain,
@@ -166,6 +198,11 @@ func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateRespons
 		return nil, fmt.Errorf("factory>update: go helper: cannot run update: %v", err)
 	}
 	return &factoryv1.UpdateResponse{}, nil
+}
+
+func (p *Factory) Communicate(req *corev1.Engage) (*corev1.InformationRequest, error) {
+	p.Base.PluginLogger.DebugMe("factory communicate: %v", req)
+	return p.Base.Communicate(req)
 }
 
 func (p *Service) InitEndpoints() {

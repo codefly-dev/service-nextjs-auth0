@@ -181,7 +181,6 @@ func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.Deploymen
 }
 
 func (p *Runtime) Communicate(req *corev1.Question) (*corev1.Answer, error) {
-	//TODO implement me
 	panic("implement me")
 }
 

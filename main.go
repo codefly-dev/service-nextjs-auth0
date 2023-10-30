@@ -22,7 +22,7 @@ type Spec struct {
 }
 
 type Service struct {
-	Base *services.Service
+	Base *services.Base
 
 	// Spec
 	*Spec
@@ -34,7 +34,7 @@ type Service struct {
 
 func NewService() *Service {
 	return &Service{
-		Base: services.NewService(conf.Of(configurations.PluginService)),
+		Base: services.NewServiceBase(conf.Of(configurations.PluginService)),
 		Spec: &Spec{},
 	}
 }
