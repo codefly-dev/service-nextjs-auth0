@@ -9,27 +9,21 @@ import (
 // Plugin version
 var conf = configurations.Plugin{
 	Publisher:  "codefly.ai",
-	Identifier: "go-grpc",
+	Identifier: "nextjs",
 	Kind:       configurations.PluginService,
 	Version:    "0.0.0",
 }
 
 type Spec struct {
-	Debug              bool `yaml:"debug"` // Developer only
-	Watch              bool `yaml:"watch"`
-	WithDebugSymbols   bool `yaml:"with-debug-symbols"`
-	CreateHttpEndpoint bool `yaml:"create-rest-endpoint"`
+	Debug bool `yaml:"debug"` // Developer only
+	Watch bool `yaml:"watch"`
 }
 
 type Service struct {
-	Base *services.Base
+	*services.Base
 
 	// Spec
 	*Spec
-
-	// Endpoints
-	GrpcEndpoint configurations.Endpoint
-	RestEndpoint *configurations.Endpoint
 }
 
 func NewService() *Service {
