@@ -1,18 +1,17 @@
 package main
 
 import (
+	"embed"
+
+	"github.com/codefly-dev/core/shared"
+
 	"github.com/codefly-dev/cli/pkg/plugins"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	"github.com/codefly-dev/core/configurations"
 )
 
 // Plugin version
-var conf = configurations.Plugin{
-	Publisher:  "codefly.ai",
-	Identifier: "go-grpc",
-	Kind:       configurations.PluginService,
-	Version:    "0.0.0",
-}
+var conf = configurations.LoadPluginConfiguration(shared.Embed(info))
 
 type Spec struct {
 	Debug              bool `yaml:"debug"` // Developer only
@@ -22,19 +21,15 @@ type Spec struct {
 }
 
 type Service struct {
-	Base *services.Service
+	*services.Base
 
 	// Spec
 	*Spec
-
-	// Endpoints
-	GrpcEndpoint configurations.Endpoint
-	RestEndpoint *configurations.Endpoint
 }
 
 func NewService() *Service {
 	return &Service{
-		Base: services.NewService(conf.Of(configurations.PluginService)),
+		Base: services.NewServiceBase(conf.Of(configurations.PluginService)),
 		Spec: &Spec{},
 	}
 }
@@ -44,3 +39,6 @@ func main() {
 		services.NewFactoryPlugin(conf.Of(configurations.PluginFactoryService), NewFactory()),
 		services.NewRuntimePlugin(conf.Of(configurations.PluginRuntimeService), NewRuntime()))
 }
+
+//go:embed plugin.codefly.yaml
+var info embed.FS
