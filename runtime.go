@@ -3,10 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/codefly-dev/cli/pkg/plugins"
-	"github.com/codefly-dev/core/shared"
-
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
+
+	"github.com/codefly-dev/cli/pkg/runners"
 
 	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
 	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
@@ -17,7 +16,7 @@ import (
 
 type Runtime struct {
 	*Service
-	Runner *shared.Runner
+	Runner *runners.Runner
 }
 
 func NewRuntime() *Runtime {
@@ -64,16 +63,29 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	p.PluginLogger.Debugf("starting service")
 
 	p.PluginLogger.TODO("CLI also has a runner, make sure we only have one if possible")
-	p.Runner = shared.NewRunner("npm", shared.NewDir(p.Location), []string{"run", "dev"}, plugins.NewServiceLogger(p.Identity.Name), p.PluginLogger)
-	err := p.Runner.Run()
+	p.Runner = &runners.Runner{
+		Name:          p.Service.Identity.Name,
+		Bin:           "npm",
+		Args:          []string{"run", "dev"},
+		PluginLogger:  p.PluginLogger,
+		ServiceLogger: p.ServiceLogger,
+		Dir:           p.Location,
+		Debug:         p.Debug,
+	}
+	err := p.Runner.Init(p.Context())
 	if err != nil {
-		return nil, shared.Wrapf(err, "cannot start go program")
+		return nil, p.PluginLogger.Wrapf(err, "cannot start service")
+	}
+	tracker, err := p.Runner.Run(p.Context())
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot start go program")
 	}
 
 	p.PluginLogger.Info("network mapping: %v", req.NetworkMappings)
 
 	return &runtimev1.StartResponse{
-		Status: p.StartSuccess(),
+		Status:   services.StartSuccess(),
+		Trackers: []*runtimev1.Tracker{tracker.Proto()},
 	}, nil
 }
 
@@ -121,8 +133,8 @@ func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.Deploymen
 	return &runtimev1.DeploymentResponse{}, nil
 }
 
-func (p *Runtime) Communicate(req *corev1.Question) (*corev1.Answer, error) {
-	panic("implement me")
+func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, error) {
+	return p.Base.Communicate(req)
 }
 
 /* Details

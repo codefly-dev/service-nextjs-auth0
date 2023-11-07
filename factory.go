@@ -13,7 +13,6 @@ import (
 	factoryv1 "github.com/codefly-dev/cli/proto/v1/services/factory"
 	"github.com/codefly-dev/core/configurations"
 	"github.com/codefly-dev/core/shared"
-	"github.com/codefly-dev/core/templates"
 )
 
 type Factory struct {
@@ -112,15 +111,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		Readme:    Readme{Summary: p.Identity.Name},
 	}
 
-	// Templatize as usual
-	err := templates.CopyAndApply(p.PluginLogger, templates.NewEmbeddedFileSystem(factory), shared.NewDir("templates/factory"),
-		shared.NewDir(p.Location), create)
-	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
-	}
-
-	err = templates.CopyAndApply(p.PluginLogger, templates.NewEmbeddedFileSystem(builder), shared.NewDir("templates/builder"),
-		shared.NewDir(p.Local("builder")), nil)
+	err := p.Templates(create, services.WithFactory(factory), services.WithBuilder(builder))
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
 	}
@@ -153,8 +144,7 @@ func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateRespons
 
 	p.ServiceLogger.Info("Updating")
 
-	err := templates.CopyAndApply(p.PluginLogger, templates.NewEmbeddedFileSystem(builder), shared.NewDir("templates/builder"),
-		shared.NewDir(p.Local("builder")), nil)
+	err := p.Templates(nil, services.WithBuilder(builder))
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
 	}

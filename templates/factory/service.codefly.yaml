@@ -1,0 +1,15 @@
+kind: service
+name: frontend
+version: ""
+applications: web
+relative-path: frontend
+namespace: default
+domain: github.com/codefly-ai/codefly-platform/iam/frontend
+plugin:
+    kind: runtime::service
+    name: nextjs
+    version: latest
+    publisher: codefly.ai
+dependencies: []
+endpoints: []
+spec: {}
