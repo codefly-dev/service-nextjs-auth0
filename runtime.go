@@ -42,8 +42,6 @@ func (p *Runtime) Init(req *servicev1.InitRequest) (*runtimev1.InitResponse, err
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.PluginLogger.DebugMe("refactor events")
-
 	if p.Spec.Watch {
 		conf := services.NewWatchConfiguration([]string{"."}, "service.codefly.yaml")
 		err := p.SetupWatcher(conf, p.EventHandler)
@@ -59,8 +57,6 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.PluginLogger.Catch()
-
-	p.PluginLogger.Debugf("starting service")
 
 	p.PluginLogger.TODO("CLI also has a runner, make sure we only have one if possible")
 	p.Runner = &runners.Runner{
