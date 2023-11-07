@@ -59,11 +59,17 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 
 	p.PluginLogger.TODO("refactor events")
 
+	nets, err := p.Network()
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot create default endpoint")
+	}
+
 	p.Runner = &golanghelpers.Runner{
 		Dir:           p.Location,
 		Args:          []string{"main.go"},
 		ServiceLogger: plugins.NewServiceLogger(p.Identity.Name),
 		PluginLogger:  p.PluginLogger,
+		Envs:          network.ConvertToEnvironmentVariables(nets),
 		Debug:         p.Spec.Debug,
 	}
 
@@ -75,15 +81,10 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 		}
 	}
 
-	err := p.Runner.Init(context.Background())
+	err = p.Runner.Init(context.Background())
 	if err != nil {
 		p.ServiceLogger.Info("-> Cannot init: %v", err)
 		return &runtimev1.ConfigureResponse{Status: services.ConfigureError(err)}, nil
-	}
-
-	nets, err := p.Network()
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot create default endpoint")
 	}
 
 	return &runtimev1.ConfigureResponse{
@@ -97,9 +98,9 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 
 	ctx := context.Background()
 
-	p.PluginLogger.Info("network mapping: %v", req.NetworkMappings)
+	p.PluginLogger.Debugf("network mapping: %v", req.NetworkMappings)
 
-	p.Runner.Envs = network.ConvertToEnvironmentVariables(req.NetworkMappings)
+	p.Runner.Envs = append(p.Runner.Envs, network.ConvertToEnvironmentVariables(req.NetworkMappings)...)
 
 	tracker, err := p.Runner.Run(ctx)
 	if err != nil {
@@ -171,8 +172,7 @@ func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.Deploymen
 }
 
 func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, error) {
-	//TODO implement me
-	panic("implement me")
+	return p.Base.Communicate(req)
 }
 
 /* Details
