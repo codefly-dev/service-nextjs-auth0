@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"github.com/codefly-dev/cli/pkg/plugins"
@@ -138,14 +139,23 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 
 	p.PluginLogger.Debugf("running sync: %v", p.Location)
 	helper := golanghelpers.Go{Dir: p.Location}
-	err := helper.ModTidy(p.PluginLogger)
+
+	// Clean-up the generated code
+	p.PluginLogger.TODO("get location of generated code from buf")
+	err := os.RemoveAll(p.Local("adapters/v1"))
 	if err != nil {
-		return nil, shared.Wrapf(err, "cannot tidy go.mod")
+		return nil, p.Wrapf(err, "cannot remove adapters")
 	}
+	// Re-generate
 	err = helper.BufGenerate(p.PluginLogger)
 	if err != nil {
-		return nil, shared.Wrapf(err, "cannot generate proto")
+		return nil, p.Wrapf(err, "cannot generate proto")
 	}
+	err = helper.ModTidy(p.PluginLogger)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot tidy go.mod")
+	}
+
 	return &runtimev1.SyncResponse{}, nil
 }
 
@@ -157,12 +167,12 @@ func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, 
 		Tag:   p.Configuration.Version,
 	})
 	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot create builder")
+		return nil, p.Wrapf(err, "cannot create builder")
 	}
 	builder.WithLogger(p.PluginLogger)
 	_, err = builder.Build()
 	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot build image")
+		return nil, p.Wrapf(err, "cannot build image")
 	}
 	return &runtimev1.BuildResponse{}, nil
 }
@@ -180,21 +190,23 @@ func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, e
  */
 
 func (p *Runtime) EventHandler(event code.Change) error {
-	p.PluginLogger.DebugMe("got an event: %v", event)
+	p.PluginLogger.Debugf("got an event: %v", event)
 	if strings.Contains(event.Path, "proto") {
+		p.ServiceLogger.Info("Detected proto changes: will sync dependencies")
 		_, err := p.Sync(&runtimev1.SyncRequest{})
 		if err != nil {
 			p.PluginLogger.Warn("cannot sync proto: %v", err)
 		}
+		p.WantSync()
+	} else {
+		p.WantRestart()
 	}
 	err := p.Runner.Init(context.Background())
 	if err != nil {
-		p.ServiceLogger.Info("-> Detected code changes: still cannot restart: %v", err)
+		p.ServiceLogger.Info("Detected code changes: still cannot restart: %v", err)
 		return err
 	}
-	p.ServiceLogger.Info("-> Detected working code changes: restarting")
-	p.PluginLogger.DebugMe("detected working code changes: restarting")
-	p.WantRestart()
+	p.ServiceLogger.Info("Detected code changes: restarting")
 	return nil
 }
 
@@ -229,13 +241,13 @@ func (p *Runtime) LoadEndpoints() ([]*corev1.Endpoint, error) {
 		case configurations.Grpc:
 			p.GrpcEndpoint, err = services.NewGrpcApi(ep, p.Local("api.proto"))
 			if err != nil {
-				return nil, p.PluginLogger.Wrapf(err, "cannot create grpc api")
+				return nil, p.Wrapf(err, "cannot create grpc api")
 			}
 			endpoints = append(endpoints, p.GrpcEndpoint)
 		case configurations.Http:
 			p.RestEndpoint, err = services.NewOpenApi(ep, p.Local("api.swagger.json"), p.PluginLogger)
 			if err != nil {
-				return nil, p.PluginLogger.Wrapf(err, "cannot create openapi api")
+				return nil, p.Wrapf(err, "cannot create openapi api")
 			}
 			endpoints = append(endpoints, p.RestEndpoint)
 		}
