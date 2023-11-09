@@ -4,7 +4,7 @@ import (
 	"embed"
 	"fmt"
 
-	corev1 "github.com/codefly-dev/cli/proto/v1/core"
+	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
 
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
@@ -59,7 +59,7 @@ type CreateConfiguration struct {
 func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req, &p.Spec)
+	err := p.Base.Init(req)
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +73,6 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.PreCreate(req, p.Spec)
-	if err != nil {
-		return nil, err
-	}
-
 	create := CreateConfiguration{
 		Name:      cases.Title(language.English, cases.NoLower).String(p.Identity.Name),
 		Domain:    p.Identity.Domain,
@@ -85,7 +80,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		Readme:    Readme{Summary: p.Identity.Name},
 	}
 
-	err = p.Templates(create, services.WithFactory(factory), services.WithBuilder(builder))
+	err := p.Templates(create, services.WithFactory(factory), services.WithBuilder(builder))
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +91,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	}
 	p.PluginLogger.Info("tree: %s", out)
 
-	endpoints, err := p.CreateEndpoints()
+	err = p.CreateEndpoints()
 	if err != nil {
 		return nil, p.Wrapf(err, "cannot create endpoints")
 	}
@@ -112,7 +107,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, fmt.Errorf("factory>create: go helper: cannot run mod tidy: %v", err)
 	}
 
-	return p.Base.PostCreate(p.Spec, endpoints...)
+	return p.Base.Create(p.Spec, p.Endpoints...)
 }
 
 func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
@@ -133,20 +128,19 @@ func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateRespons
 	return &factoryv1.UpdateResponse{}, nil
 }
 
-func (p *Factory) CreateEndpoints() ([]*corev1.Endpoint, error) {
-	var endpoints []*corev1.Endpoint
-	grpc, err := services.NewGrpcApi(&configurations.Endpoint{Name: "grpc"}, p.Local("api.proto"))
+func (p *Factory) CreateEndpoints() error {
+	grpc, err := endpoints.NewGrpcApi(&configurations.Endpoint{Name: "grpc"}, p.Local("api.proto"))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot create grpc api")
+		return p.Wrapf(err, "cannot create grpc api")
 	}
-	endpoints = append(endpoints, grpc)
+	p.Endpoints = append(p.Endpoints, grpc)
 
-	rest, err := services.NewOpenApi(&configurations.Endpoint{Name: "http", Public: true}, p.Local("api.swagger.json"), p.PluginLogger)
+	rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "http", Public: true}, p.Local("api.swagger.json"))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot create openapi api")
+		return p.Wrapf(err, "cannot create openapi api")
 	}
-	endpoints = append(endpoints, rest)
-	return endpoints, nil
+	p.Endpoints = append(p.Endpoints, rest)
+	return nil
 }
 
 //go:embed templates/factory

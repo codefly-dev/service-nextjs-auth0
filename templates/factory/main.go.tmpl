@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"{{.Domain}}/adapters"
-	codefly "github.com/codefly-dev/sdk-go"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	codefly "github.com/codefly-dev/sdk-go"
+	"{{.Domain}}/adapters"
 )
 
 func main() {
@@ -21,8 +22,8 @@ func main() {
 	config := &adapters.Configuration{
 		EndpointGrpc: codefly.Endpoint("self::grpc").PortAddress(),
 	}
-	if codefly.Endpoint("self::http").IsPresent() {
-		config.EndpointHttp = codefly.Endpoint("self::http").PortAddress()
+	if codefly.Endpoint("self::rest").IsPresent() {
+		config.EndpointHttp = codefly.Endpoint("self::rest").PortAddress()
 	}
 
 	server, err := adapters.NewServer(config)

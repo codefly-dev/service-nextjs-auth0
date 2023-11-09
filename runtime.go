@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/codefly-dev/cli/pkg/plugins"
+	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
 	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
 	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
@@ -39,20 +40,17 @@ func NewRuntime() *Runtime {
 func (p *Runtime) Init(req *v1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req, p.Spec)
-	if err != nil {
-		return nil, err
-	}
-	endpoints, err := p.LoadEndpoints()
+	err := p.Base.Init(req)
 	if err != nil {
 		return nil, err
 	}
 
-	return &runtimev1.InitResponse{
-		Version:   p.Version(),
-		Endpoints: endpoints,
-	}, nil
+	err = p.LoadEndpoints()
+	if err != nil {
+		return nil, err
+	}
 
+	return p.Base.RuntimeInitResponse(p.Endpoints)
 }
 
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
@@ -211,11 +209,7 @@ func (p *Runtime) EventHandler(event code.Change) error {
 }
 
 func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
-	endpoints := []*corev1.Endpoint{p.GrpcEndpoint}
-	if p.RestEndpoint != nil {
-		endpoints = append(endpoints, p.RestEndpoint)
-	}
-	pm := network.NewServicePortManager(p.Identity, endpoints...).WithHost("localhost").WithLogger(p.PluginLogger)
+	pm := network.NewServicePortManager(p.Identity, p.Endpoints...).WithHost("localhost").WithLogger(p.PluginLogger)
 	err := pm.Expose(p.GrpcEndpoint)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot add grpc endpoint to network manager")
@@ -233,24 +227,23 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 	return pm.NetworkMapping()
 }
 
-func (p *Runtime) LoadEndpoints() ([]*corev1.Endpoint, error) {
+func (p *Runtime) LoadEndpoints() error {
 	var err error
-	var endpoints []*corev1.Endpoint
 	for _, ep := range p.Configuration.Endpoints {
 		switch ep.Api.Protocol {
 		case configurations.Grpc:
-			p.GrpcEndpoint, err = services.NewGrpcApi(ep, p.Local("api.proto"))
+			p.GrpcEndpoint, err = endpoints.NewGrpcApi(ep, p.Local("api.proto"))
 			if err != nil {
-				return nil, p.Wrapf(err, "cannot create grpc api")
+				return p.Wrapf(err, "cannot create grpc api")
 			}
-			endpoints = append(endpoints, p.GrpcEndpoint)
-		case configurations.Http:
-			p.RestEndpoint, err = services.NewOpenApi(ep, p.Local("api.swagger.json"), p.PluginLogger)
+			p.Endpoints = append(p.Endpoints, p.GrpcEndpoint)
+		case configurations.Rest:
+			p.RestEndpoint, err = endpoints.NewRestApiFromOpenAPI(p.Context(), ep, p.Local("api.swagger.json"))
 			if err != nil {
-				return nil, p.Wrapf(err, "cannot create openapi api")
+				return p.Wrapf(err, "cannot create openapi api")
 			}
-			endpoints = append(endpoints, p.RestEndpoint)
+			p.Endpoints = append(p.Endpoints, p.RestEndpoint)
 		}
 	}
-	return endpoints, nil
+	return nil
 }
