@@ -1,6 +1,6 @@
 module github.com/codefly-dev/go-grpc
 
-go 1.21.1
+go 1.21.4
 
 require golang.org/x/text v0.13.0
 

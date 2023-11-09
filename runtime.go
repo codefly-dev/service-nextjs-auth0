@@ -1,7 +1,10 @@
 package main
 
 import (
+	"os"
 	"strings"
+
+	"github.com/codefly-dev/cli/pkg/plugins/network"
 
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
 
@@ -28,7 +31,7 @@ func NewRuntime() *Runtime {
 func (p *Runtime) Init(req *servicev1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req, &p.Spec)
+	err := p.Base.Init(req)
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +62,18 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	defer p.PluginLogger.Catch()
 
 	p.PluginLogger.TODO("CLI also has a runner, make sure we only have one if possible")
+
+	envs := os.Environ()
+	envs = append(envs, network.ConvertToEnvironmentVariables(req.NetworkMappings)...)
+	p.PluginLogger.DebugMe("network mapping: %v", req.NetworkMappings)
+	p.PluginLogger.DebugMe("network mapping env: %v", envs)
+
+	// Add the group
 	p.Runner = &runners.Runner{
 		Name:          p.Service.Identity.Name,
 		Bin:           "npm",
 		Args:          []string{"run", "dev"},
+		Envs:          envs,
 		PluginLogger:  p.PluginLogger,
 		ServiceLogger: p.ServiceLogger,
 		Dir:           p.Location,

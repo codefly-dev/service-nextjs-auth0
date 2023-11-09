@@ -8,25 +8,6 @@ const Home = () => {
   return (
     <Layout user={user} loading={isLoading}>
       {isLoading && <p>Loading login info...</p>}
-
-      {!isLoading && !user && (
-        <>
-          <p>
-            To test the login click on <i>Login</i>
-          </p>
-          <p>
-            Once you have logged in you should be able to navigate between
-            protected routes: client rendered, server rendered profile pages,
-            and <i>Logout</i>
-          </p>
-        </>
-      )}
-
-      {user && (
-        <>
-          <UserInfoCard user={user} />
-        </>
-      )}
     </Layout>
   );
 };

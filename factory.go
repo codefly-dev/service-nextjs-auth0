@@ -72,7 +72,7 @@ func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req, &p.Spec)
+	err := p.Base.Init(req)
 	if err != nil {
 		return nil, err
 	}
@@ -122,21 +122,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	}
 	p.PluginLogger.Info("tree: %s", out)
 
-	// Load default
-	err = configurations.LoadSpec(req.Spec, &p.Spec, shared.BaseLogger(p.PluginLogger))
-	if err != nil {
-		return nil, err
-	}
-
-	//	May override or check spec here
-	spec, err := configurations.SerializeSpec(p.Spec)
-	if err != nil {
-		return nil, err
-	}
-
-	return &factoryv1.CreateResponse{
-		Spec: spec,
-	}, nil
+	return p.Base.Create(p.Spec)
 }
 
 func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
