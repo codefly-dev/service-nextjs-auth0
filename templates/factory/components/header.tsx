@@ -8,13 +8,13 @@ type HeaderProps = {
 
 const Header = ({ user, loading }: HeaderProps) => {
   return (
-    <div className="px-[50px] bg-white dark:bg-black border-b border-neutral-200/60 dark:border-neutral-900 flex justify-between items-center gap-4 py-3">
+    <div className="px-[50px] bg-white dark:bg-black border-b globals__border-color flex justify-between items-center gap-4 py-3">
       <Link href="/">
-        <h1 className="font-light">Next.js with Auth0</h1>
+        <h1>Next.js with Auth0</h1>
       </Link>
 
       <nav className="flex justify-center">
-        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[14px] font-light [&_a:hover]:text-neutral-500 [&_a]:transition-all duration-200">
+        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[14px] [&_a:hover]:text-neutral-500 [&_a]:transition-all duration-200">
           {!loading &&
             (user ? (
               <>

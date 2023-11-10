@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  @apply bg-neutral-50 dark:bg-black text-black dark:text-neutral-300;
+  @apply bg-neutral-50 dark:bg-black text-[#0a0a0a] dark:text-[#ededed] font-normal;
 }
 
 h2 {
@@ -15,7 +15,9 @@ p {
 }
 
 pre {
-  @apply p-5 border border-neutral-100 bg-white rounded-xl overflow-auto;
+  @apply text-[14px] leading-[24px] p-5 bg-white dark:bg-black;
+  @apply border border-neutral-200/60 dark:border-neutral-900;
+  @apply rounded-xl overflow-auto;
 }
 
 button {
@@ -27,4 +29,8 @@ button {
 .globals__card {
   @apply bg-white dark:bg-neutral-950/75;
   @apply border border-neutral-200/60 dark:border-neutral-900 rounded-2xl;
+}
+
+.globals__border-color {
+  @apply border-neutral-200/60 dark:border-neutral-900;
 }
