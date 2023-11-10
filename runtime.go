@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -33,13 +34,10 @@ func (p *Runtime) Init(req *servicev1.InitRequest) (*runtimev1.InitResponse, err
 
 	err := p.Base.Init(req)
 	if err != nil {
-		return nil, err
+		return p.Base.RuntimeInitResponseError(err)
 	}
 
-	return &runtimev1.InitResponse{
-		Version: p.Version(),
-	}, nil
-
+	return p.Base.RuntimeInitResponse(p.Endpoints)
 }
 
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
@@ -64,9 +62,15 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	p.PluginLogger.TODO("CLI also has a runner, make sure we only have one if possible")
 
 	envs := os.Environ()
-	envs = append(envs, network.ConvertToEnvironmentVariables(req.NetworkMappings)...)
+	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert network mappings")
+	}
+	for _, n := range nws {
+		envs = append(envs, fmt.Sprintf("NEXT_PUBLIC_%s", n))
+	}
 	p.PluginLogger.DebugMe("network mapping: %v", req.NetworkMappings)
-	p.PluginLogger.DebugMe("network mapping env: %v", envs)
+	p.PluginLogger.DebugMe("network mapping env: %v", nws)
 
 	// Add the group
 	p.Runner = &runners.Runner{
@@ -79,7 +83,7 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		Dir:           p.Location,
 		Debug:         p.Debug,
 	}
-	err := p.Runner.Init(p.Context())
+	err = p.Runner.Init(p.Context())
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot start service")
 	}
