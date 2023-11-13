@@ -1,9 +1,10 @@
 import { getAccessToken, withApiAuthRequired } from "@auth0/nextjs-auth0";
 
-const API_URL = process.env["CODEFLY-ENDPOINT__APP__SVC__COOL__REST"];
+const API_URL = "https://dev-4c24vdpgjj3eyqmy.us.auth0.com"
 
 async function handle(req, res) {
   const { accessToken } = await getAccessToken(req, res);
+  console.log("prototected API accessToken", accessToken)
   try {
     const response = await fetch(API_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },

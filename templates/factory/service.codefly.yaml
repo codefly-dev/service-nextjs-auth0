@@ -1,15 +1,14 @@
 kind: service
 name: frontend
-version: ""
-applications: web
+version: 0.0.0
+application: web
 relative-path: frontend
 namespace: default
-domain: github.com/codefly-ai/codefly-platform/iam/frontend
+domain: github.com/codefly-ai/codefly-platform/web/frontend
 plugin:
     kind: runtime::service
-    name: nextjs
+    name: nextjs-auth0
     version: latest
     publisher: codefly.ai
-dependencies: []
 endpoints: []
 spec: {}

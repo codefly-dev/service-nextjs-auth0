@@ -59,6 +59,8 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.PluginLogger.Catch()
 
+	p.DebugMe("I CAN START")
+
 	p.PluginLogger.TODO("CLI also has a runner, make sure we only have one if possible")
 
 	envs := os.Environ()
@@ -69,8 +71,6 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	for _, n := range nws {
 		envs = append(envs, fmt.Sprintf("NEXT_PUBLIC_%s", n))
 	}
-	p.PluginLogger.DebugMe("network mapping: %v", req.NetworkMappings)
-	p.PluginLogger.DebugMe("network mapping env: %v", nws)
 
 	// Add the group
 	p.Runner = &runners.Runner{
@@ -87,12 +87,11 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot start service")
 	}
+	//p.Runner.Wait = true
 	tracker, err := p.Runner.Run(p.Context())
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot start go program")
 	}
-
-	p.PluginLogger.Info("network mapping: %v", req.NetworkMappings)
 
 	return &runtimev1.StartResponse{
 		Status:   services.StartSuccess(),
