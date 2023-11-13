@@ -3,8 +3,9 @@ package main
 import (
 	"embed"
 	"fmt"
-
+	"github.com/codefly-dev/cli/pkg/plugins/communicate"
 	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
+	corev1 "github.com/codefly-dev/cli/proto/v1/core"
 
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
@@ -18,6 +19,9 @@ import (
 
 type Factory struct {
 	*Service
+
+	create         *communicate.ClientContext
+	createSequence *communicate.Sequence
 }
 
 func NewFactory() *Factory {
@@ -64,14 +68,45 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 		return nil, err
 	}
 
-	p.PluginLogger.TODO("create options for endpoints")
+	p.create, err = p.NewCreateCommunicate()
+	if err != nil {
+		return nil, err
+	}
+
+	channels, err := p.WithCommunications(services.NewChannel(communicate.Create, p.create))
+	if err != nil {
+		return nil, err
+	}
 	return &factoryv1.InitResponse{
-		Version: p.Version(),
+		Version:  p.Version(),
+		Channels: channels,
 	}, nil
+}
+
+const Watch = "watch"
+
+func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
+	client, err := communicate.NewClientContext(p.Context(), communicate.Create)
+	p.createSequence, err = client.NewSequence(
+		client.NoOp(&corev1.Message{Message: "Thank you for choosing go-grpc plugin by codefly.dev"}),
+		client.NewConfirm(&corev1.Message{Name: Watch, Message: "Code hot-reload (Recommended)?", Description: "Let codefly restart/resync your service when code changes are detected"}, true),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
+
+	// Make sure the communication for create has been done successfully
+	if !p.create.Ready() {
+		return nil, p.PluginLogger.Errorf("create: communication not ready")
+	}
+
+	p.Spec.Watch = p.create.Confirm(p.createSequence.Find(Watch)).Confirmed
+	p.DebugMe("WATCHER %v", p.Spec.Watch)
 
 	create := CreateConfiguration{
 		Name:      cases.Title(language.English, cases.NoLower).String(p.Identity.Name),
@@ -135,7 +170,7 @@ func (p *Factory) CreateEndpoints() error {
 	}
 	p.Endpoints = append(p.Endpoints, grpc)
 
-	rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "http", Public: true}, p.Local("api.swagger.json"))
+	rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Public: true}, p.Local("api.swagger.json"))
 	if err != nil {
 		return p.Wrapf(err, "cannot create openapi api")
 	}

@@ -23,7 +23,7 @@ func main() {
 		EndpointGrpc: codefly.Endpoint("self::grpc").PortAddress(),
 	}
 	if codefly.Endpoint("self::http").IsPresent() {
-		config.EndpointHttp = codefly.Endpoint("self::http").PortAddress()
+		config.EndpointHttp = codefly.Endpoint("self::rest").PortAddress()
 	}
 
 	server, err := adapters.NewServer(config)

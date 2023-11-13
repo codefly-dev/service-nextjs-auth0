@@ -42,12 +42,12 @@ func (p *Runtime) Init(req *v1.InitRequest) (*runtimev1.InitResponse, error) {
 
 	err := p.Base.Init(req)
 	if err != nil {
-		return nil, err
+		return p.Base.RuntimeInitResponseError(err)
 	}
 
 	err = p.LoadEndpoints()
 	if err != nil {
-		return nil, err
+		return p.Base.RuntimeInitResponseError(err)
 	}
 
 	return p.Base.RuntimeInitResponse(p.Endpoints)
@@ -56,11 +56,14 @@ func (p *Runtime) Init(req *v1.InitRequest) (*runtimev1.InitResponse, error) {
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.PluginLogger.TODO("refactor events")
-
 	nets, err := p.Network()
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot create default endpoint")
+	}
+
+	envs, err := network.ConvertToEnvironmentVariables(nets)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert network mappings to environment variables")
 	}
 
 	p.Runner = &golanghelpers.Runner{
@@ -68,10 +71,12 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 		Args:          []string{"main.go"},
 		ServiceLogger: plugins.NewServiceLogger(p.Identity.Name),
 		PluginLogger:  p.PluginLogger,
-		Envs:          network.ConvertToEnvironmentVariables(nets),
+		Envs:          envs,
 		Debug:         p.Spec.Debug,
 	}
 
+	p.Spec.Watch = true
+	p.ServiceLogger.Info("watching code changes")
 	if p.Spec.Watch {
 		conf := services.NewWatchConfiguration([]string{".", "adapters"}, "service.codefly.yaml")
 		err := p.SetupWatcher(conf, p.EventHandler)
@@ -99,8 +104,14 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 
 	p.PluginLogger.Debugf("network mapping: %v", req.NetworkMappings)
 
-	p.Runner.Envs = append(p.Runner.Envs, network.ConvertToEnvironmentVariables(req.NetworkMappings)...)
+	envs, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert network mappings to environment variables")
+	}
+	p.Runner.Envs = append(p.Runner.Envs, envs...)
 
+	p.Runner.Envs = append(p.Runner.Envs, "CODEFLY_SDK__LOGLEVEL", "debug")
+	p.DebugMe("all env: %v", p.Runner.Envs)
 	tracker, err := p.Runner.Run(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot run go")
@@ -134,6 +145,9 @@ func (p *Runtime) Stop(req *runtimev1.StopRequest) (*runtimev1.StopResponse, err
 
 func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, error) {
 	defer p.PluginLogger.Catch()
+
+	p.PluginLogger.TODO("Some caching please!")
+	return &runtimev1.SyncResponse{}, nil
 
 	p.PluginLogger.Debugf("running sync: %v", p.Location)
 	helper := golanghelpers.Go{Dir: p.Location}
@@ -230,19 +244,21 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 func (p *Runtime) LoadEndpoints() error {
 	var err error
 	for _, ep := range p.Configuration.Endpoints {
-		switch ep.Api.Protocol {
+		switch ep.Api {
 		case configurations.Grpc:
 			p.GrpcEndpoint, err = endpoints.NewGrpcApi(ep, p.Local("api.proto"))
 			if err != nil {
 				return p.Wrapf(err, "cannot create grpc api")
 			}
 			p.Endpoints = append(p.Endpoints, p.GrpcEndpoint)
+			continue
 		case configurations.Rest:
 			p.RestEndpoint, err = endpoints.NewRestApiFromOpenAPI(p.Context(), ep, p.Local("api.swagger.json"))
 			if err != nil {
 				return p.Wrapf(err, "cannot create openapi api")
 			}
 			p.Endpoints = append(p.Endpoints, p.RestEndpoint)
+			continue
 		}
 	}
 	return nil
