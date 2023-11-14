@@ -1,3 +1,5 @@
 *.so
 .idea
 dist
+
+dist/
