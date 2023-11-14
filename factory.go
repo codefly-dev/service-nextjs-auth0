@@ -115,7 +115,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		Readme:    Readme{Summary: p.Identity.Name},
 	}
 
-	err := p.Templates(create, services.WithFactory(factory), services.WithBuilder(builder))
+	err := p.Templates(create, services.WithFactory(factory, "go.work"), services.WithBuilder(builder))
 	if err != nil {
 		return nil, err
 	}

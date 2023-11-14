@@ -109,9 +109,8 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		return nil, p.Wrapf(err, "cannot convert network mappings to environment variables")
 	}
 	p.Runner.Envs = append(p.Runner.Envs, envs...)
-
 	p.Runner.Envs = append(p.Runner.Envs, "CODEFLY_SDK__LOGLEVEL", "debug")
-	p.DebugMe("all env: %v", p.Runner.Envs)
+
 	tracker, err := p.Runner.Run(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot run go")
@@ -147,7 +146,6 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 	defer p.PluginLogger.Catch()
 
 	p.PluginLogger.TODO("Some caching please!")
-	return &runtimev1.SyncResponse{}, nil
 
 	p.PluginLogger.Debugf("running sync: %v", p.Location)
 	helper := golanghelpers.Go{Dir: p.Location}
@@ -174,9 +172,10 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, error) {
 	p.PluginLogger.Debugf("building docker image")
 	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
-		Root:  p.Location,
-		Image: p.Identity.Name,
-		Tag:   p.Configuration.Version,
+		Root:       p.Location,
+		Dockerfile: "codefly/builder/Dockerfile",
+		Image:      p.Identity.Name,
+		Tag:        p.Configuration.Version,
 	})
 	if err != nil {
 		return nil, p.Wrapf(err, "cannot create builder")
