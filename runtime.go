@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/codefly-dev/cli/pkg/plugins/network"
 
@@ -11,7 +10,6 @@ import (
 
 	"github.com/codefly-dev/cli/pkg/runners"
 
-	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
 	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	servicev1 "github.com/codefly-dev/cli/proto/v1/services"
@@ -43,14 +41,6 @@ func (p *Runtime) Init(req *servicev1.InitRequest) (*runtimev1.InitResponse, err
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	if p.Spec.Watch {
-		conf := services.NewWatchConfiguration([]string{"."}, "service.codefly.yaml")
-		err := p.SetupWatcher(conf, p.EventHandler)
-		if err != nil {
-			p.PluginLogger.Warn("error in watcher")
-		}
-	}
-
 	return &runtimev1.ConfigureResponse{
 		Status: services.ConfigureSuccess(),
 	}, nil
@@ -70,6 +60,12 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	}
 	for _, n := range nws {
 		envs = append(envs, fmt.Sprintf("NEXT_PUBLIC_%s", n))
+	}
+
+	// Create the .env.local file
+	err = os.WriteFile(p.Local(".env.local"), []byte(EnvLocal), 0644)
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot write .env.local file")
 	}
 
 	// Add the group
@@ -98,6 +94,14 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		Trackers: []*runtimev1.Tracker{tracker.Proto()},
 	}, nil
 }
+
+const EnvLocal = `
+AUTH0_ISSUER_BASE_URL=https://dev-4c24vdpgjj3eyqmy.us.auth0.com
+AUTH0_CLIENT_ID=W0BIdRDyyBMzp8YVfEc5BHoM7PchdGJM
+AUTH0_CLIENT_SECRET=EPDjeP2bCYf-RLYd_NmIX_7DUyYHTrCcuSkn5F-KpLPMznx-ZzzkVkOT5KgUi-85
+AUTH0_AUDIENCE=https://codefly.ai
+AUTH0_BASE_URL=http://localhost:3000
+AUTH0_SECRET=3d39be6e671cb5656d1b3b7bca6c9e49e160cc3375d171f6e777bc76a5b35bb8`
 
 func (p *Runtime) Information(req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
 	return &runtimev1.InformationResponse{Status: p.Status}, nil
@@ -150,17 +154,3 @@ func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, e
 /* Details
 
  */
-
-func (p *Runtime) EventHandler(event code.Change) error {
-	p.PluginLogger.DebugMe("got an event: %v", event)
-	if strings.Contains(event.Path, "proto") {
-		_, err := p.Sync(&runtimev1.SyncRequest{})
-		if err != nil {
-			p.PluginLogger.Warn("cannot sync proto: %v", err)
-		}
-	}
-	p.ServiceLogger.Info("-> Detected working code changes: restarting")
-	p.PluginLogger.DebugMe("detected working code changes: restarting")
-	p.WantRestart()
-	return nil
-}

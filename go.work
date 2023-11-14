@@ -2,7 +2,6 @@ go 1.21.4
 
 use (
 	.
-	base
 	../../../../codefly.dev/core
-    ../../../../codefly.dev/cli
+    	../../../../codefly.dev/cli
 )

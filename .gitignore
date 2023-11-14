@@ -2,3 +2,7 @@
 .idea
 *.lock
 *.lock-json
+.DS_Store
+node_modules
+.next
+.env.local

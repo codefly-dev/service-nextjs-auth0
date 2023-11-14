@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -20,6 +21,7 @@ type Factory struct {
 
 	// Communication
 	create *communicate.ClientContext
+	seq    *communicate.Sequence
 }
 
 func NewFactory() *Factory {
@@ -59,10 +61,11 @@ type CreateConfiguration struct {
 }
 
 func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
-	client := communicate.NewClientContext(communicate.Create, p.PluginLogger)
-	err := client.NewSequence(
-		client.NewConfirm(&corev1.Message{Name: "watch", Message: "Code hot-reload (Recommended)?", Description: "Let codefly restart/resync your service when code changes are detected"}, true),
-	)
+	client, err := communicate.NewClientContext(p.Context(), communicate.Create)
+	if err != nil {
+		return nil, err
+	}
+	p.seq, err = client.NewSequence()
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +80,7 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 		return nil, err
 	}
 
+	p.DebugMe("ARE YOU KIDDING ME???")
 	p.create, err = p.NewCreateCommunicate()
 	if err != nil {
 		return nil, err
@@ -111,9 +115,16 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		Readme:    Readme{Summary: p.Identity.Name},
 	}
 
-	err := p.Templates(create, services.WithFactory(factory), services.WithBuilder(builder))
+	err := p.Templates(create, services.WithFactory(factory, "node_modules"), services.WithBuilder(builder))
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
+	}
+
+	// Handle _app.tsx because of golang embed limitations
+	p.ServiceLogger.Info("Creating _app.tsx")
+	err = os.WriteFile(p.Local("/pages/_app.tsx"), []byte(appTsx), 0o644)
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot save _app.tsx")
 	}
 
 	out, err := shared.GenerateTree(p.Location, " ")
@@ -124,6 +135,21 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 
 	return p.Base.Create(p.Spec)
 }
+
+const appTsx = `
+import { UserProvider } from "@auth0/nextjs-auth0/client";
+import "../styles/globals.css";
+
+export default function App({ Component, pageProps }) {
+  const { user } = pageProps;
+
+  return (
+    <UserProvider user={user}>
+      <Component {...pageProps} />
+    </UserProvider>
+  );
+}
+`
 
 func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
 	defer p.PluginLogger.Catch()
@@ -142,9 +168,6 @@ func (p *Factory) Communicate(req *corev1.Engage) (*corev1.InformationRequest, e
 	p.PluginLogger.DebugMe("factory communicate: %v", req)
 	return p.Base.Communicate(req)
 }
-
-//go:embed templates/routes
-var routes embed.FS
 
 //go:embed templates/factory
 var factory embed.FS

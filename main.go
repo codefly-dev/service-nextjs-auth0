@@ -14,7 +14,6 @@ var conf = configurations.LoadPluginConfiguration(shared.Embed(info))
 
 type Spec struct {
 	Debug bool `yaml:"debug"` // Developer only
-	Watch bool `yaml:"watch"`
 }
 
 type Service struct {
