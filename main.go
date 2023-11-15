@@ -11,9 +11,9 @@ import (
 )
 
 // Plugin version
-var conf = configurations.LoadPluginConfiguration(shared.Embed(info))
+var plugin = configurations.LoadPluginConfiguration(shared.Embed(info))
 
-type Spec struct {
+type Settings struct {
 	Debug              bool `yaml:"debug"` // Developer only
 	Watch              bool `yaml:"watch"`
 	WithDebugSymbols   bool `yaml:"with-debug-symbols"`
@@ -23,21 +23,21 @@ type Spec struct {
 type Service struct {
 	*services.Base
 
-	// Spec
-	*Spec
+	// Settings
+	*Settings
 }
 
 func NewService() *Service {
 	return &Service{
-		Base: services.NewServiceBase(conf.Of(configurations.PluginService)),
-		Spec: &Spec{},
+		Base:     services.NewServiceBase(plugin.Of(configurations.PluginService)),
+		Settings: &Settings{},
 	}
 }
 
 func main() {
 	plugins.Register(
-		services.NewFactoryPlugin(conf.Of(configurations.PluginFactoryService), NewFactory()),
-		services.NewRuntimePlugin(conf.Of(configurations.PluginRuntimeService), NewRuntime()))
+		services.NewFactoryPlugin(plugin.Of(configurations.PluginFactoryService), NewFactory()),
+		services.NewRuntimePlugin(plugin.Of(configurations.PluginRuntimeService), NewRuntime()))
 }
 
 //go:embed plugin.codefly.yaml

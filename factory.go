@@ -63,7 +63,7 @@ type CreateConfiguration struct {
 func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req)
+	err := p.Base.Init(req, p.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +84,14 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 }
 
 const Watch = "watch"
+const WithRest = "with_rest"
 
 func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 	client, err := communicate.NewClientContext(p.Context(), communicate.Create)
 	p.createSequence, err = client.NewSequence(
 		client.NoOp(&corev1.Message{Message: "Thank you for choosing go-grpc plugin by codefly.dev"}),
 		client.NewConfirm(&corev1.Message{Name: Watch, Message: "Code hot-reload (Recommended)?", Description: "Let codefly restart/resync your service when code changes are detected"}, true),
+		client.NewConfirm(&corev1.Message{Name: WithRest, Message: "Automatic REST generation (Recommended)?", Description: "Let codefly create a REST server synced magically"}, true),
 	)
 	if err != nil {
 		return nil, err
@@ -105,8 +107,8 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, p.PluginLogger.Errorf("create: communication not ready")
 	}
 
-	p.Spec.Watch = p.create.Confirm(p.createSequence.Find(Watch)).Confirmed
-	p.DebugMe("WATCHER %v", p.Spec.Watch)
+	p.Settings.Watch = p.create.Confirm(p.createSequence.Find(Watch)).Confirmed
+	p.Settings.CreateHttpEndpoint = p.create.Confirm(p.createSequence.Find(WithRest)).Confirmed
 
 	create := CreateConfiguration{
 		Name:      cases.Title(language.English, cases.NoLower).String(p.Identity.Name),
@@ -115,7 +117,8 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		Readme:    Readme{Summary: p.Identity.Name},
 	}
 
-	err := p.Templates(create, services.WithFactory(factory, "go.work"), services.WithBuilder(builder))
+	ignores := []string{"go.work", "service.generation.codefly.yaml"}
+	err := p.Templates(create, services.WithFactory(factory, ignores...))
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +145,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, fmt.Errorf("factory>create: go helper: cannot run mod tidy: %v", err)
 	}
 
-	return p.Base.Create(p.Spec, p.Endpoints...)
+	return p.Base.Create(p.Settings, p.Endpoints...)
 }
 
 func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
@@ -170,11 +173,13 @@ func (p *Factory) CreateEndpoints() error {
 	}
 	p.Endpoints = append(p.Endpoints, grpc)
 
-	rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Public: true}, p.Local("api.swagger.json"))
-	if err != nil {
-		return p.Wrapf(err, "cannot create openapi api")
+	if p.Settings.CreateHttpEndpoint {
+		rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Public: true}, p.Local("api.swagger.json"))
+		if err != nil {
+			return p.Wrapf(err, "cannot create openapi api")
+		}
+		p.Endpoints = append(p.Endpoints, rest)
 	}
-	p.Endpoints = append(p.Endpoints, rest)
 	return nil
 }
 

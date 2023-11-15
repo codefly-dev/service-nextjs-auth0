@@ -40,7 +40,7 @@ func NewRuntime() *Runtime {
 func (p *Runtime) Init(req *v1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req)
+	err := p.Base.Init(req, p.Settings)
 	if err != nil {
 		return p.Base.RuntimeInitResponseError(err)
 	}
@@ -72,12 +72,11 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 		ServiceLogger: plugins.NewServiceLogger(p.Identity.Name),
 		PluginLogger:  p.PluginLogger,
 		Envs:          envs,
-		Debug:         p.Spec.Debug,
+		Debug:         p.Settings.Debug,
 	}
 
-	p.Spec.Watch = true
 	p.ServiceLogger.Info("watching code changes")
-	if p.Spec.Watch {
+	if p.Settings.Watch {
 		conf := services.NewWatchConfiguration([]string{".", "adapters"}, "service.codefly.yaml")
 		err := p.SetupWatcher(conf, p.EventHandler)
 		if err != nil {
@@ -169,8 +168,41 @@ func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, err
 	return &runtimev1.SyncResponse{}, nil
 }
 
+type Env struct {
+	Key   string
+	Value string
+}
+
+type DockerTemplating struct {
+	Envs []Env
+}
+
 func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, error) {
 	p.PluginLogger.Debugf("building docker image")
+	docker := DockerTemplating{}
+	e, err := endpoints.FromProtoEndpoint(p.GrpcEndpoint)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert grpc endpoint")
+	}
+	gRPC := configurations.AsEndpointEnvironmentVariableKey(p.Configuration.Application, p.Configuration.Name, e)
+	docker.Envs = append(docker.Envs, Env{Key: gRPC, Value: "localhost:9090"})
+	if p.Settings.CreateHttpEndpoint {
+		e, err = endpoints.FromProtoEndpoint(p.RestEndpoint)
+		if err != nil {
+			return nil, p.Wrapf(err, "cannot convert grpc endpoint")
+		}
+		rest := configurations.AsEndpointEnvironmentVariableKey(p.Configuration.Application, p.Configuration.Name, e)
+		docker.Envs = append(docker.Envs, Env{Key: rest, Value: "localhost:8080"})
+	}
+
+	err = os.Remove(p.Local("codefly/builder/Dockerfile"))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot remove dockerfile")
+	}
+	err = p.Templates(docker, services.WithBuilder(builder))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot copy and apply template")
+	}
 	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
 		Root:       p.Location,
 		Dockerfile: "codefly/builder/Dockerfile",
