@@ -2,30 +2,22 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
 
 	"github.com/codefly-dev/cli/pkg/plugins"
-	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
 	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
-	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/network"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
 	v1 "github.com/codefly-dev/cli/proto/v1/services"
 	runtimev1 "github.com/codefly-dev/cli/proto/v1/services/runtime"
-	"github.com/codefly-dev/core/configurations"
 	"github.com/codefly-dev/core/shared"
 	"github.com/pkg/errors"
 )
 
 type Runtime struct {
 	*Service
-
-	// Endpoints
-	GrpcEndpoint *corev1.Endpoint
-	RestEndpoint *corev1.Endpoint
 
 	// internal
 	Runner *golanghelpers.Runner
@@ -76,13 +68,6 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 	}
 
 	p.ServiceLogger.Info("watching code changes")
-	if p.Settings.Watch {
-		conf := services.NewWatchConfiguration([]string{".", "adapters"}, "service.codefly.yaml")
-		err := p.SetupWatcher(conf, p.EventHandler)
-		if err != nil {
-			p.PluginLogger.Warn("error in watcher")
-		}
-	}
 
 	err = p.Runner.Init(context.Background())
 	if err != nil {
@@ -109,6 +94,14 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 	}
 	p.Runner.Envs = append(p.Runner.Envs, envs...)
 	p.Runner.Envs = append(p.Runner.Envs, "CODEFLY_SDK__LOGLEVEL", "debug")
+
+	if p.Settings.Watch {
+		conf := services.NewWatchConfiguration([]string{".", "adapters"}, "service.codefly.yaml")
+		err := p.SetupWatcher(conf, p.EventHandler)
+		if err != nil {
+			p.PluginLogger.Warn("error in watcher")
+		}
+	}
 
 	tracker, err := p.Runner.Run(ctx)
 	if err != nil {
@@ -141,89 +134,6 @@ func (p *Runtime) Stop(req *runtimev1.StopRequest) (*runtimev1.StopResponse, err
 	return &runtimev1.StopResponse{}, nil
 }
 
-func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, error) {
-	defer p.PluginLogger.Catch()
-
-	p.PluginLogger.TODO("Some caching please!")
-
-	p.PluginLogger.Debugf("running sync: %v", p.Location)
-	helper := golanghelpers.Go{Dir: p.Location}
-
-	// Clean-up the generated code
-	p.PluginLogger.TODO("get location of generated code from buf")
-	err := os.RemoveAll(p.Local("adapters/v1"))
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot remove adapters")
-	}
-	// Re-generate
-	err = helper.BufGenerate(p.PluginLogger)
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot generate proto")
-	}
-	err = helper.ModTidy(p.PluginLogger)
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot tidy go.mod")
-	}
-
-	return &runtimev1.SyncResponse{}, nil
-}
-
-type Env struct {
-	Key   string
-	Value string
-}
-
-type DockerTemplating struct {
-	Envs []Env
-}
-
-func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, error) {
-	p.PluginLogger.Debugf("building docker image")
-	docker := DockerTemplating{}
-	e, err := endpoints.FromProtoEndpoint(p.GrpcEndpoint)
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot convert grpc endpoint")
-	}
-	gRPC := configurations.AsEndpointEnvironmentVariableKey(p.Configuration.Application, p.Configuration.Name, e)
-	docker.Envs = append(docker.Envs, Env{Key: gRPC, Value: "localhost:9090"})
-	if p.Settings.CreateHttpEndpoint {
-		e, err = endpoints.FromProtoEndpoint(p.RestEndpoint)
-		if err != nil {
-			return nil, p.Wrapf(err, "cannot convert grpc endpoint")
-		}
-		rest := configurations.AsEndpointEnvironmentVariableKey(p.Configuration.Application, p.Configuration.Name, e)
-		docker.Envs = append(docker.Envs, Env{Key: rest, Value: "localhost:8080"})
-	}
-
-	err = os.Remove(p.Local("codefly/builder/Dockerfile"))
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot remove dockerfile")
-	}
-	err = p.Templates(docker, services.WithBuilder(builder))
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot copy and apply template")
-	}
-	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
-		Root:       p.Location,
-		Dockerfile: "codefly/builder/Dockerfile",
-		Image:      p.Identity.Name,
-		Tag:        p.Configuration.Version,
-	})
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot create builder")
-	}
-	builder.WithLogger(p.PluginLogger)
-	_, err = builder.Build()
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot build image")
-	}
-	return &runtimev1.BuildResponse{}, nil
-}
-
-func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.DeploymentResponse, error) {
-	return &runtimev1.DeploymentResponse{}, nil
-}
-
 func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, error) {
 	return p.Base.Communicate(req)
 }
@@ -235,11 +145,6 @@ func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, e
 func (p *Runtime) EventHandler(event code.Change) error {
 	p.PluginLogger.Debugf("got an event: %v", event)
 	if strings.Contains(event.Path, "proto") {
-		p.ServiceLogger.Info("Detected proto changes: will sync dependencies")
-		_, err := p.Sync(&runtimev1.SyncRequest{})
-		if err != nil {
-			p.PluginLogger.Warn("cannot sync proto: %v", err)
-		}
 		p.WantSync()
 	} else {
 		p.WantRestart()
@@ -254,8 +159,11 @@ func (p *Runtime) EventHandler(event code.Change) error {
 }
 
 func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
-	pm := network.NewServicePortManager(p.Identity, p.Endpoints...).WithHost("localhost").WithLogger(p.PluginLogger)
-	err := pm.Expose(p.GrpcEndpoint)
+	pm, err := network.NewServicePortManager(p.Context(), p.Identity, p.Endpoints...)
+	if err != nil {
+		return nil, shared.Wrapf(err, "cannot create default endpoint")
+	}
+	err = pm.Expose(p.GrpcEndpoint)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot add grpc endpoint to network manager")
 	}
@@ -270,27 +178,4 @@ func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
 		return nil, shared.Wrapf(err, "cannot reserve ports")
 	}
 	return pm.NetworkMapping()
-}
-
-func (p *Runtime) LoadEndpoints() error {
-	var err error
-	for _, ep := range p.Configuration.Endpoints {
-		switch ep.Api {
-		case configurations.Grpc:
-			p.GrpcEndpoint, err = endpoints.NewGrpcApi(ep, p.Local("api.proto"))
-			if err != nil {
-				return p.Wrapf(err, "cannot create grpc api")
-			}
-			p.Endpoints = append(p.Endpoints, p.GrpcEndpoint)
-			continue
-		case configurations.Rest:
-			p.RestEndpoint, err = endpoints.NewRestApiFromOpenAPI(p.Context(), ep, p.Local("api.swagger.json"))
-			if err != nil {
-				return p.Wrapf(err, "cannot create openapi api")
-			}
-			p.Endpoints = append(p.Endpoints, p.RestEndpoint)
-			continue
-		}
-	}
-	return nil
 }

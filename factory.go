@@ -6,7 +6,9 @@ import (
 	"github.com/codefly-dev/cli/pkg/plugins/communicate"
 	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
+	"os"
 
+	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	v1 "github.com/codefly-dev/cli/proto/v1/services"
@@ -68,6 +70,11 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 		return nil, err
 	}
 
+	err = p.LoadEndpoints()
+	if err != nil {
+		return nil, err
+	}
+
 	p.create, err = p.NewCreateCommunicate()
 	if err != nil {
 		return nil, err
@@ -86,12 +93,26 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 const Watch = "watch"
 const WithRest = "with_rest"
 
+func (p *Factory) Welcome() (*corev1.Message, map[string]string) {
+	return &corev1.Message{Message: `Welcome to the service plugin #(bold,cyan)[go-grc] by plugin #(bold,cyan)[codefly.ai]
+Some of the things this plugin provides for you:
+- gRPC server
+- REST server auto-generated (optional)
+- hot-reload (optional)
+- docker build
+- Kubernetes deployment
+Are you excited?`}, map[string]string{
+			"PluginName":      plugin.Identifier,
+			"PluginPublisher": plugin.Publisher,
+		}
+}
+
 func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 	client, err := communicate.NewClientContext(p.Context(), communicate.Create)
 	p.createSequence, err = client.NewSequence(
-		client.NoOp(&corev1.Message{Message: "Thank you for choosing go-grpc plugin by codefly.dev"}),
-		client.NewConfirm(&corev1.Message{Name: Watch, Message: "Code hot-reload (Recommended)?", Description: "Let codefly restart/resync your service when code changes are detected"}, true),
-		client.NewConfirm(&corev1.Message{Name: WithRest, Message: "Automatic REST generation (Recommended)?", Description: "Let codefly create a REST server synced magically"}, true),
+		client.Display(p.Welcome()),
+		client.NewConfirm(&corev1.Message{Name: Watch, Message: "Code hot-reload (Recommended)?", Description: "codefly can restart your service when code changes are detected"}, true),
+		client.NewConfirm(&corev1.Message{Name: WithRest, Message: "Automatic REST generation (Recommended)?", Description: "codefly can generate a REST server that stays magically synced to your gRPC definition -- the easiest way to do REST"}, true),
 	)
 	if err != nil {
 		return nil, err
@@ -164,6 +185,90 @@ func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateRespons
 		return nil, fmt.Errorf("factory>update: go helper: cannot run update: %v", err)
 	}
 	return &factoryv1.UpdateResponse{}, nil
+}
+
+func (p *Factory) Sync(req *factoryv1.SyncRequest) (*factoryv1.SyncResponse, error) {
+	defer p.PluginLogger.Catch()
+
+	p.PluginLogger.TODO("Some caching please!")
+
+	p.PluginLogger.Debugf("running sync: %v", p.Location)
+	helper := golanghelpers.Go{Dir: p.Location}
+
+	// Clean-up the generated code
+	p.PluginLogger.TODO("get location of generated code from buf")
+	err := os.RemoveAll(p.Local("adapters/v1"))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot remove adapters")
+	}
+	// Re-generate
+	err = helper.BufGenerate(p.PluginLogger)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot generate proto")
+	}
+	err = helper.ModTidy(p.PluginLogger)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot tidy go.mod")
+	}
+
+	return &factoryv1.SyncResponse{}, nil
+}
+
+type Env struct {
+	Key   string
+	Value string
+}
+
+type DockerTemplating struct {
+	Envs []Env
+}
+
+func (p *Factory) Build(req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, error) {
+	p.PluginLogger.Debugf("building docker image")
+	docker := DockerTemplating{}
+
+	e, err := endpoints.FromProtoEndpoint(p.GrpcEndpoint)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert grpc endpoint")
+	}
+	gRPC := configurations.AsEndpointEnvironmentVariableKey(p.Configuration.Application, p.Configuration.Name, e)
+	docker.Envs = append(docker.Envs, Env{Key: gRPC, Value: "localhost:9090"})
+	if p.RestEndpoint != nil {
+		e, err = endpoints.FromProtoEndpoint(p.RestEndpoint)
+		if err != nil {
+			return nil, p.Wrapf(err, "cannot convert grpc endpoint")
+		}
+		rest := configurations.AsEndpointEnvironmentVariableKey(p.Configuration.Application, p.Configuration.Name, e)
+		docker.Envs = append(docker.Envs, Env{Key: rest, Value: "localhost:8080"})
+	}
+
+	err = os.Remove(p.Local("codefly/builder/Dockerfile"))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot remove dockerfile")
+	}
+	err = p.Templates(docker, services.WithBuilder(builder))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot copy and apply template")
+	}
+	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
+		Root:       p.Location,
+		Dockerfile: "codefly/builder/Dockerfile",
+		Image:      p.Identity.Name,
+		Tag:        p.Configuration.Version,
+	})
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot create builder")
+	}
+	builder.WithLogger(p.PluginLogger)
+	_, err = builder.Build()
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot build image")
+	}
+	return &factoryv1.BuildResponse{}, nil
+}
+
+func (p *Factory) Deploy(req *factoryv1.DeploymentRequest) (*factoryv1.DeploymentResponse, error) {
+	return &factoryv1.DeploymentResponse{}, nil
 }
 
 func (p *Factory) CreateEndpoints() error {

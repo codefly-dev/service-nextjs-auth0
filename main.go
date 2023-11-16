@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
+	corev1 "github.com/codefly-dev/cli/proto/v1/core"
 
 	"github.com/codefly-dev/core/shared"
 
@@ -23,6 +25,10 @@ type Settings struct {
 type Service struct {
 	*services.Base
 
+	// Endpoints
+	GrpcEndpoint *corev1.Endpoint
+	RestEndpoint *corev1.Endpoint
+
 	// Settings
 	*Settings
 }
@@ -32,6 +38,29 @@ func NewService() *Service {
 		Base:     services.NewServiceBase(plugin.Of(configurations.PluginService)),
 		Settings: &Settings{},
 	}
+}
+
+func (p *Service) LoadEndpoints() error {
+	var err error
+	for _, ep := range p.Configuration.Endpoints {
+		switch ep.Api {
+		case configurations.Grpc:
+			p.GrpcEndpoint, err = endpoints.NewGrpcApi(ep, p.Local("api.proto"))
+			if err != nil {
+				return p.Wrapf(err, "cannot create grpc api")
+			}
+			p.Endpoints = append(p.Endpoints, p.GrpcEndpoint)
+			continue
+		case configurations.Rest:
+			p.RestEndpoint, err = endpoints.NewRestApiFromOpenAPI(p.Context(), ep, p.Local("api.swagger.json"))
+			if err != nil {
+				return p.Wrapf(err, "cannot create openapi api")
+			}
+			p.Endpoints = append(p.Endpoints, p.RestEndpoint)
+			continue
+		}
+	}
+	return nil
 }
 
 func main() {
