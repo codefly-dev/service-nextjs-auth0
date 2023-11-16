@@ -20,8 +20,8 @@ github.com/charmbracelet/bubbletea v0.24.2 h1:uaQIKx9Ai6Gdh5zpTbGiWpytMU+CfsPp06
 github.com/charmbracelet/bubbletea v0.24.2/go.mod h1:XdrNrV4J8GiyshTtx3DNuYkR1FDaJmO3l2nejekbsgg=
 github.com/cheggaaa/pb/v3 v3.1.4 h1:DN8j4TVVdKu3WxVwcRKu0sG00IIU6FewoABZzXbRQeo=
 github.com/cheggaaa/pb/v3 v3.1.4/go.mod h1:6wVjILNBaXMs8c21qRiaUM8BR82erfgau1DQ4iUXmSA=
-github.com/codefly-dev/cli v0.0.0-20231113114839-b1b1dd9fd2ae h1:c029Rpaa+NbB6GAMDMngGlpMYp9uEZczXyo82rZsbGE=
-github.com/codefly-dev/cli v0.0.0-20231113114839-b1b1dd9fd2ae/go.mod h1:q76lAj76lw9vaUoxEHLdARKIOPTReyb+5P13SO2nSAE=
+github.com/codefly-dev/cli v0.0.1 h1:sb/qT81U6rv/qoou9D2PO3vi3/QARzQebkjp7HuJW+k=
+github.com/codefly-dev/cli v0.0.1/go.mod h1:Lcw5pHBW5DatxyZMsVnKuea0JMdcv+oDbmuSySJRd3E=
 github.com/codefly-dev/core v0.0.13 h1:IBKUPdIxUOy+gqZWL5cT+IRE9TI0YbSZkv6aoJw99ag=
 github.com/codefly-dev/core v0.0.13/go.mod h1:f9SiXibiSCGpmQFh7nJXzIgy+pnDp4GU0fEutHS3KFw=
 github.com/codefly-dev/golor v0.0.10 h1:eqNxY3aSVbXDWo+3S9fcRynCEStPNo033owzwvzziOQ=
@@ -108,8 +108,8 @@ github.com/hashicorp/go-hclog v1.5.0 h1:bI2ocEMgcVlz55Oj1xZNBsVi900c7II+fWDyV9o+
 github.com/hashicorp/go-hclog v1.5.0/go.mod h1:W4Qnvbt70Wk/zYJryRzDRU/4r0kIg0PVHBcfoyhpF5M=
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
-github.com/hashicorp/go-plugin v1.5.2 h1:aWv8eimFqWlsEiMrYZdPYl+FdHaBJSN4AWwGWfT1G2Y=
-github.com/hashicorp/go-plugin v1.5.2/go.mod h1:w1sAEES3g3PuV/RzUrgow20W2uErMly84hhD3um1WL4=
+github.com/hashicorp/go-plugin v1.6.0 h1:wgd4KxHJTVGGqWBq4QPB1i5BZNEx9BR8+OFmHDmTk8A=
+github.com/hashicorp/go-plugin v1.6.0/go.mod h1:lBS5MtSSBZk0SHc66KACcjjlU6WzEVP/8pwz68aMkCI=
 github.com/hashicorp/yamux v0.1.1 h1:yrQxtgseBDrq9Y652vSRDvsKCJKOUD+GzTS4Y0Y8pvE=
 github.com/hashicorp/yamux v0.1.1/go.mod h1:CtWFDAQgb7dxtzFs4tWbplKIe2jSi3+5vKbgIO0SLnQ=
 github.com/jhump/protoreflect v1.15.1 h1:HUMERORf3I3ZdX05WaQ6MIpd/NJ434hTp5YiKgfCL6c=

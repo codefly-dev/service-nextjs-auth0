@@ -3,7 +3,7 @@ module github.com/codefly-dev/go-grpc
 go 1.21.4
 
 require (
-	github.com/codefly-dev/cli v0.0.0-20231113114839-b1b1dd9fd2ae
+	github.com/codefly-dev/cli v0.0.1
 	github.com/codefly-dev/core v0.0.13
 	github.com/pkg/errors v0.9.1
 	golang.org/x/text v0.14.0
@@ -45,7 +45,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-plugin v1.5.2 // indirect
+	github.com/hashicorp/go-plugin v1.6.0 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.2 // indirect

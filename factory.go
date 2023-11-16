@@ -75,12 +75,7 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 		return nil, err
 	}
 
-	p.create, err = p.NewCreateCommunicate()
-	if err != nil {
-		return nil, err
-	}
-
-	channels, err := p.WithCommunications(services.NewChannel(communicate.Create, p.create))
+	channels, err := p.WithCommunications(services.NewDynamicChannel(communicate.Create))
 	if err != nil {
 		return nil, err
 	}
@@ -92,16 +87,25 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 
 const Watch = "watch"
 const WithRest = "with_rest"
+const WithKreya = "with_kreya"
+const WithPostman = "with_postman"
 
 func (p *Factory) Welcome() (*corev1.Message, map[string]string) {
 	return &corev1.Message{Message: `Welcome to the service plugin #(bold,cyan)[go-grc] by plugin #(bold,cyan)[codefly.ai]
 Some of the things this plugin provides for you:
+ #(bold,cyan)[Developer Experience]
+- hot-reload
+- code generation automated
+- Kreya configuration (optional)
+- Postman configuration (coming soon)
+ #(bold,cyan)[Code]
 - gRPC server
 - REST server auto-generated (optional)
-- hot-reload (optional)
+- Version endpoint
+#(bold,cyan)[Production ready]
 - docker build
 - Kubernetes deployment
-Are you excited?`}, map[string]string{
+`}, map[string]string{
 			"PluginName":      plugin.Identifier,
 			"PluginPublisher": plugin.Publisher,
 		}
@@ -111,8 +115,9 @@ func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 	client, err := communicate.NewClientContext(p.Context(), communicate.Create)
 	p.createSequence, err = client.NewSequence(
 		client.Display(p.Welcome()),
-		client.NewConfirm(&corev1.Message{Name: Watch, Message: "Code hot-reload (Recommended)?", Description: "codefly can restart your service when code changes are detected"}, true),
-		client.NewConfirm(&corev1.Message{Name: WithRest, Message: "Automatic REST generation (Recommended)?", Description: "codefly can generate a REST server that stays magically synced to your gRPC definition -- the easiest way to do REST"}, true),
+		client.NewConfirm(&corev1.Message{Name: Watch, Message: "Code hot-reload (Recommended)?", Description: "codefly can restart your service when code changes are detected 🔎"}, true),
+		client.NewConfirm(&corev1.Message{Name: WithRest, Message: "Automatic REST generation (Recommended)?", Description: "codefly can generate a REST server that stays magically 🪄 synced to your gRPC definition -- the easiest way to do REST"}, true),
+		client.NewConfirm(&corev1.Message{Name: WithRest, Message: "Kreya configuration?", Description: "codefly can create a Kreya configuration to make it easy to call your endpoints, because why would you want to do that manually? 😵‍💫"}, true),
 	)
 	if err != nil {
 		return nil, err
@@ -123,8 +128,24 @@ func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
 
+	if p.create == nil {
+		// Initial setup
+		var err error
+		p.PluginLogger.DebugMe("Setup communication")
+		p.create, err = p.NewCreateCommunicate()
+		if err != nil {
+			return nil, p.PluginLogger.Wrapf(err, "cannot setup up communication")
+		}
+		err = p.Wire(communicate.Create, p.create)
+		if err != nil {
+			return nil, p.PluginLogger.Wrapf(err, "cannot wire communication")
+		}
+		return &factoryv1.CreateResponse{NeedCommunication: true}, nil
+	}
+
 	// Make sure the communication for create has been done successfully
 	if !p.create.Ready() {
+		p.DebugMe("create not ready!")
 		return nil, p.PluginLogger.Errorf("create: communication not ready")
 	}
 
@@ -149,6 +170,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, err
 	}
 	p.PluginLogger.Info("tree: %s", out)
+	p.ServiceLogger.Info("We generated this code for you:\n%s", out)
 
 	err = p.CreateEndpoints()
 	if err != nil {
