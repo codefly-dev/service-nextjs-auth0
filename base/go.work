@@ -1,7 +1,7 @@
-go 1.21.3
+go 1.21.4
 
 use (
 	.
-	/Users/antoine/Development/codefly.dev/core
-	/Users/antoine/Development/codefly.dev/sdk/sdk-go
+	../../../../../codefly.dev/cli
+	../../../../../codefly.dev/core
 )

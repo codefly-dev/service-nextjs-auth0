@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
 	"github.com/codefly-dev/cli/pkg/plugins/communicate"
 	"github.com/codefly-dev/cli/pkg/plugins/endpoints"
 	corev1 "github.com/codefly-dev/cli/proto/v1/core"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"os"
+	"strings"
+	"unicode"
 
 	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
@@ -15,8 +20,6 @@ import (
 	factoryv1 "github.com/codefly-dev/cli/proto/v1/services/factory"
 	"github.com/codefly-dev/core/configurations"
 	"github.com/codefly-dev/core/shared"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 type Factory struct {
@@ -46,20 +49,6 @@ type CreateService struct {
 
 type GenerateInstructions struct {
 	Package string
-}
-
-type Readme struct {
-	Summary string
-}
-
-type CreateConfiguration struct {
-	Name        string
-	Destination string
-	Namespace   string
-	Domain      string
-	Service     CreateService
-	Plugin      configurations.Plugin
-	Readme      Readme
 }
 
 func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
@@ -125,6 +114,112 @@ func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 	return client, nil
 }
 
+type Deployment struct {
+	Replicas int
+}
+
+type DockerImage struct {
+	Repository string
+	Name       string
+	Tag        string
+}
+
+type Case struct {
+	LowerCase string
+	SnakeCase string
+	CamelCase string
+	KebabCase string
+	Title     string
+	DnsCase   string
+}
+
+type ServiceWithCase struct {
+	Name      Case
+	Unique    Case
+	Domain    string
+	Namespace string
+}
+
+// toSnakeCase converts a string to snake_case
+func toSnakeCase(s string) string {
+	var buf bytes.Buffer
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				buf.WriteRune('_')
+			}
+			buf.WriteRune(unicode.ToLower(r))
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
+}
+
+// toCamelCase converts a string to camelCase
+func toCamelCase(s string) string {
+	var buf bytes.Buffer
+	toUpper := false
+	for _, r := range s {
+		if r == '_' || r == '-' {
+			toUpper = true
+			continue
+		}
+		if toUpper {
+			buf.WriteRune(unicode.ToUpper(r))
+			toUpper = false
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
+}
+
+// toKebabCase converts a string to kebab-case
+func toKebabCase(str string) string {
+	return strings.ReplaceAll(toSnakeCase(str), "_", "-")
+}
+
+func toDnsCase(s string) string {
+	return strings.ReplaceAll(toLowerCase(s), "/", "-")
+}
+
+func toCase(s string) Case {
+	return Case{
+		LowerCase: toLowerCase(s),
+		DnsCase:   toDnsCase(s),
+		SnakeCase: toSnakeCase(s),
+		CamelCase: toCamelCase(s),
+		KebabCase: toKebabCase(s),
+		Title:     cases.Title(language.English).String(s),
+	}
+}
+
+func toLowerCase(s string) string {
+	return strings.ToLower(s)
+}
+
+func ToServiceWithCase(svc *configurations.Service) ServiceWithCase {
+	return ServiceWithCase{
+		Name:      toCase(svc.Name),
+		Unique:    toCase(svc.Unique()),
+		Domain:    svc.Domain,
+		Namespace: svc.Namespace,
+	}
+}
+
+type Readme struct {
+	Summary string
+}
+
+type CreateConfiguration struct {
+	Service    ServiceWithCase
+	Plugin     *configurations.Plugin
+	Image      DockerImage
+	Readme     Readme
+	Deployment Deployment
+}
+
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
 
@@ -153,14 +248,15 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	p.Settings.CreateHttpEndpoint = p.create.Confirm(p.createSequence.Find(WithRest)).Confirmed
 
 	create := CreateConfiguration{
-		Name:      cases.Title(language.English, cases.NoLower).String(p.Identity.Name),
-		Domain:    p.Identity.Domain,
-		Namespace: p.Identity.Namespace,
-		Readme:    Readme{Summary: p.Identity.Name},
+		Service:    ToServiceWithCase(p.Configuration),
+		Plugin:     p.Plugin,
+		Image:      DockerImage{},
+		Deployment: Deployment{},
+		Readme:     Readme{Summary: p.Identity.Name},
 	}
 
 	ignores := []string{"go.work", "service.generation.codefly.yaml"}
-	err := p.Templates(create, services.WithFactory(factory, ignores...))
+	err := p.Templates(create, services.WithFactory(factory, ignores...), services.WithBuilder(builder), services.WithDeployment(deployment))
 	if err != nil {
 		return nil, err
 	}
@@ -315,3 +411,6 @@ var factory embed.FS
 
 //go:embed templates/builder
 var builder embed.FS
+
+//go:embed templates/deployment
+var deployment embed.FS

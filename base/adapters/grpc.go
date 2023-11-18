@@ -3,6 +3,8 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"net"
 
 	"github.com/bufbuild/protovalidate-go"
@@ -35,6 +37,13 @@ func NewGrpServer(c *Configuration) (*GrpcServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create validator: %w", err)
 	}
+
+	// Set up the health check service
+	healthServer := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+
+	// Set the status of your service
+	healthServer.SetServingStatus("Web", grpc_health_v1.HealthCheckResponse_SERVING)
 
 	s := GrpcServer{
 		configuration: c,

@@ -26,6 +26,13 @@ func (s *RestServer) Run(ctx context.Context) error {
 	gwMux := runtime.NewServeMux()
 
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+	//// Register the health check service
+	//err := grpc_health_v1.RegisterHealthHandlerFromEndpoint(ctx, gwMux, s.config.EndpointGrpc, opts)
+	//if err != nil {
+	//	// Handle error
+	//}
+
 	err := gen.RegisterWebHandlerFromEndpoint(ctx, gwMux, s.config.EndpointGrpc, opts)
 	if err != nil {
 		return err

@@ -8,14 +8,13 @@ plugin:
     version: latest
     publisher: codefly.ai
 endpoints:
-    - endpoint:
-        name: grpc
-        description: Expose gRPC
-      api:
-        protocol: grpc
-    - endpoint:
-        name: http
-        description: Expose REST
-      api:
-        protocol: http
-        framework: rest
+    - name: grpc
+      api: grpc
+    - name: rest
+      public: true
+      api: rest
+spec:
+    create-rest-endpoint: true
+    debug: false
+    watch: true
+    with-debug-symbols: false

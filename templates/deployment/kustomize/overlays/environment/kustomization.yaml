@@ -1,0 +1,7 @@
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: app-values
+    files:
+      - values.yaml
