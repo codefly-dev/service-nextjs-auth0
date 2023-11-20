@@ -58,38 +58,16 @@ type CreateConfiguration struct {
 	Readme      Readme
 }
 
-func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
-	client := communicate.NewClientContext(communicate.Create, p.PluginLogger)
-	err := client.NewSequence(
-		client.NewConfirm(&corev1.Message{Name: "watch", Message: "Code hot-reload (Recommended)?", Description: "Let codefly restart/resync your service when code changes are detected"}, true),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return client, nil
-}
-
 func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req)
-	if err != nil {
-		return nil, err
-	}
-
-	p.create, err = p.NewCreateCommunicate()
-	if err != nil {
-		return nil, err
-	}
-
-	channels, err := p.WithCommunications(services.NewChannel(communicate.Create, p.create))
+	err := p.Base.Init(req, p.Settings)
 	if err != nil {
 		return nil, err
 	}
 
 	return &factoryv1.InitResponse{
-		Version:  p.Version(),
-		Channels: channels,
+		Version: p.Version(),
 	}, nil
 }
 
@@ -101,7 +79,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		return nil, p.PluginLogger.Errorf("create: communication not ready")
 	}
 
-	//p.Spec.Watch =
+	//p.Settings.Watch =
 	p.ServiceLogger.Info("Creating service")
 
 	create := CreateConfiguration{
@@ -122,7 +100,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	}
 	p.PluginLogger.Info("tree: %s", out)
 
-	return p.Base.Create(p.Spec)
+	return p.Base.Create(p.Settings)
 }
 
 func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
@@ -136,6 +114,22 @@ func (p *Factory) Update(req *factoryv1.UpdateRequest) (*factoryv1.UpdateRespons
 	}
 
 	return &factoryv1.UpdateResponse{}, nil
+}
+
+func (p *Factory) Sync(req *factoryv1.SyncRequest) (*factoryv1.SyncResponse, error) {
+	defer p.PluginLogger.Catch()
+
+	return &factoryv1.SyncResponse{}, nil
+}
+
+func (p *Factory) Build(req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, error) {
+	p.PluginLogger.Debugf("building docker image")
+
+	return &factoryv1.BuildResponse{}, nil
+}
+
+func (p *Factory) Deploy(req *factoryv1.DeploymentRequest) (*factoryv1.DeploymentResponse, error) {
+	return &factoryv1.DeploymentResponse{}, nil
 }
 
 func (p *Factory) Communicate(req *corev1.Engage) (*corev1.InformationRequest, error) {

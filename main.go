@@ -12,7 +12,7 @@ import (
 // Plugin version
 var conf = configurations.LoadPluginConfiguration(shared.Embed(info))
 
-type Spec struct {
+type Settings struct {
 	Debug bool `yaml:"debug"` // Developer only
 	Watch bool `yaml:"watch"`
 }
@@ -20,14 +20,14 @@ type Spec struct {
 type Service struct {
 	*services.Base
 
-	// Spec
-	*Spec
+	// Settings
+	*Settings
 }
 
 func NewService() *Service {
 	return &Service{
-		Base: services.NewServiceBase(conf.Of(configurations.PluginService)),
-		Spec: &Spec{},
+		Base:     services.NewServiceBase(conf.Of(configurations.PluginService)),
+		Settings: &Settings{},
 	}
 }
 

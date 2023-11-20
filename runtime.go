@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/codefly-dev/cli/pkg/plugins/network"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/codefly-dev/cli/pkg/runners"
 
 	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
-	dockerhelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/docker"
 	"github.com/codefly-dev/cli/pkg/plugins/services"
 	servicev1 "github.com/codefly-dev/cli/proto/v1/services"
 	runtimev1 "github.com/codefly-dev/cli/proto/v1/services/runtime"
@@ -32,7 +30,7 @@ func NewRuntime() *Runtime {
 func (p *Runtime) Init(req *servicev1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	err := p.Base.Init(req)
+	err := p.Base.Init(req, p.Settings)
 	if err != nil {
 		return p.Base.RuntimeInitResponseError(err)
 	}
@@ -43,7 +41,7 @@ func (p *Runtime) Init(req *servicev1.InitRequest) (*runtimev1.InitResponse, err
 func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	if p.Spec.Watch {
+	if p.Settings.Watch {
 		conf := services.NewWatchConfiguration([]string{"."}, "service.codefly.yaml")
 		err := p.SetupWatcher(conf, p.EventHandler)
 		if err != nil {
@@ -115,34 +113,6 @@ func (p *Runtime) Stop(req *runtimev1.StopRequest) (*runtimev1.StopResponse, err
 	return &runtimev1.StopResponse{}, nil
 }
 
-func (p *Runtime) Sync(req *runtimev1.SyncRequest) (*runtimev1.SyncResponse, error) {
-	defer p.PluginLogger.Catch()
-
-	return &runtimev1.SyncResponse{}, nil
-}
-
-func (p *Runtime) Build(req *runtimev1.BuildRequest) (*runtimev1.BuildResponse, error) {
-	p.PluginLogger.Debugf("building docker image")
-	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
-		Root:  p.Location,
-		Image: p.Identity.Name,
-		Tag:   p.Configuration.Version,
-	})
-	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot create builder")
-	}
-	builder.WithLogger(p.PluginLogger)
-	_, err = builder.Build()
-	if err != nil {
-		return nil, p.PluginLogger.Wrapf(err, "cannot build image")
-	}
-	return &runtimev1.BuildResponse{}, nil
-}
-
-func (p *Runtime) Deploy(req *runtimev1.DeploymentRequest) (*runtimev1.DeploymentResponse, error) {
-	return &runtimev1.DeploymentResponse{}, nil
-}
-
 func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, error) {
 	return p.Base.Communicate(req)
 }
@@ -153,12 +123,6 @@ func (p *Runtime) Communicate(req *corev1.Engage) (*corev1.InformationRequest, e
 
 func (p *Runtime) EventHandler(event code.Change) error {
 	p.PluginLogger.DebugMe("got an event: %v", event)
-	if strings.Contains(event.Path, "proto") {
-		_, err := p.Sync(&runtimev1.SyncRequest{})
-		if err != nil {
-			p.PluginLogger.Warn("cannot sync proto: %v", err)
-		}
-	}
 	p.ServiceLogger.Info("-> Detected working code changes: restarting")
 	p.PluginLogger.DebugMe("detected working code changes: restarting")
 	p.WantRestart()
