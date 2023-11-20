@@ -256,7 +256,9 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	}
 
 	ignores := []string{"go.work", "service.generation.codefly.yaml"}
-	err := p.Templates(create, services.WithFactory(factory, ignores...), services.WithBuilder(builder), services.WithDeployment(deployment))
+	err := p.Templates(create, services.WithFactory(factory, ignores...),
+		services.WithBuilder(builder),
+		services.WithDeploymentFor(deployment, "kustomize/base"))
 	if err != nil {
 		return nil, err
 	}
