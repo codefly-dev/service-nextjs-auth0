@@ -218,6 +218,8 @@ type CreateConfiguration struct {
 	Image      DockerImage
 	Readme     Readme
 	Deployment Deployment
+	Domain     string
+	Envs       []string
 }
 
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
@@ -249,6 +251,7 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 
 	create := CreateConfiguration{
 		Service:    ToServiceWithCase(p.Configuration),
+		Domain:     p.Identity.Domain,
 		Plugin:     p.Plugin,
 		Image:      DockerImage{},
 		Deployment: Deployment{},
