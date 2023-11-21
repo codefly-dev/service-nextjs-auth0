@@ -74,12 +74,6 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	// Make sure the communication for create has been done successfully
-	if !p.create.Ready() {
-		return nil, p.PluginLogger.Errorf("create: communication not ready")
-	}
-
-	//p.Settings.Watch =
 	p.ServiceLogger.Info("Creating service")
 
 	create := CreateConfiguration{
@@ -89,7 +83,8 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 		Readme:    Readme{Summary: p.Identity.Name},
 	}
 
-	err := p.Templates(create, services.WithFactory(factory), services.WithBuilder(builder))
+	ignores := []string{"node_modules", ".next", ".idea"}
+	err := p.Templates(create, services.WithFactory(factory, ignores...), services.WithBuilder(builder))
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
 	}
