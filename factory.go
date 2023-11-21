@@ -311,25 +311,25 @@ func (p *Factory) Sync(req *factoryv1.SyncRequest) (*factoryv1.SyncResponse, err
 	defer p.PluginLogger.Catch()
 
 	p.PluginLogger.TODO("Some caching please!")
-
-	p.PluginLogger.Debugf("running sync: %v", p.Location)
-	helper := golanghelpers.Go{Dir: p.Location}
-
-	// Clean-up the generated code
-	p.PluginLogger.TODO("get location of generated code from buf")
-	err := os.RemoveAll(p.Local("adapters/v1"))
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot remove adapters")
-	}
-	// Re-generate
-	err = helper.BufGenerate(p.PluginLogger)
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot generate proto")
-	}
-	err = helper.ModTidy(p.PluginLogger)
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot tidy go.mod")
-	}
+	//
+	//p.PluginLogger.Debugf("running sync: %v", p.Location)
+	//helper := golanghelpers.Go{Dir: p.Location}
+	//
+	//// Clean-up the generated code
+	//p.PluginLogger.TODO("get location of generated code from buf")
+	//err := os.RemoveAll(p.Local("adapters/v1"))
+	//if err != nil {
+	//	return nil, p.Wrapf(err, "cannot remove adapters")
+	//}
+	//// Re-generate
+	//err = helper.BufGenerate(p.PluginLogger)
+	//if err != nil {
+	//	return nil, p.Wrapf(err, "cannot generate proto")
+	//}
+	//err = helper.ModTidy(p.PluginLogger)
+	//if err != nil {
+	//	return nil, p.Wrapf(err, "cannot tidy go.mod")
+	//}
 
 	return &factoryv1.SyncResponse{}, nil
 }
@@ -399,7 +399,7 @@ func (p *Factory) CreateEndpoints() error {
 	p.Endpoints = append(p.Endpoints, grpc)
 
 	if p.Settings.CreateHttpEndpoint {
-		rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Public: true}, p.Local("api.swagger.json"))
+		rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Visibility: "private"}, p.Local("api.swagger.json"))
 		if err != nil {
 			return p.Wrapf(err, "cannot create openapi api")
 		}
