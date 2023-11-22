@@ -57,8 +57,6 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.PluginLogger.Catch()
 
-	p.DebugMe("I CAN START")
-
 	p.PluginLogger.TODO("CLI also has a runner, make sure we only have one if possible")
 
 	envs := os.Environ()

@@ -3,6 +3,10 @@ package main
 import (
 	"embed"
 
+	"github.com/codefly-dev/core/templates"
+
+	"github.com/codefly-dev/cli/pkg/runners"
+
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -20,6 +24,7 @@ type Factory struct {
 
 	// Communication
 	create *communicate.ClientContext
+	Runner *runners.Runner
 }
 
 func NewFactory() *Factory {
@@ -88,12 +93,37 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	if err != nil {
 		return nil, p.PluginLogger.Wrapf(err, "cannot copy and apply template")
 	}
+	// Need to handle the case of pages/_app.tsx
+	err = templates.Copy(shared.Embed(special),
+		shared.NewFile("templates/special/pages/app.tsx"), shared.NewFile(p.Local("pages/_app.tsx")))
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot copy special template")
+	}
 
 	out, err := shared.GenerateTree(p.Location, " ")
 	if err != nil {
 		return nil, err
 	}
 	p.PluginLogger.Info("tree: %s", out)
+
+	p.Runner = &runners.Runner{
+		Name:          p.Service.Identity.Name,
+		Bin:           "npm",
+		Args:          []string{"install", "ci"},
+		PluginLogger:  p.PluginLogger,
+		ServiceLogger: p.ServiceLogger,
+		Dir:           p.Location,
+		Debug:         p.Debug,
+	}
+	err = p.Runner.Init(p.Context())
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot start service")
+	}
+	p.DebugMe("running npm install")
+	_, err = p.Runner.Run(p.Context())
+	if err != nil {
+		return nil, p.PluginLogger.Wrapf(err, "cannot start go program")
+	}
 
 	return p.Base.Create(p.Settings)
 }
@@ -140,3 +170,6 @@ var factory embed.FS
 
 //go:embed templates/builder
 var builder embed.FS
+
+//go:embed templates/special
+var special embed.FS
