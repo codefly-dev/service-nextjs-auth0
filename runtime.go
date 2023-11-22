@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/codefly-dev/cli/pkg/plugins"
 	"github.com/codefly-dev/cli/pkg/plugins/helpers/code"
 	golanghelpers "github.com/codefly-dev/cli/pkg/plugins/helpers/go"
 	"github.com/codefly-dev/cli/pkg/plugins/network"
@@ -61,7 +60,7 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 	p.Runner = &golanghelpers.Runner{
 		Dir:           p.Location,
 		Args:          []string{"main.go"},
-		ServiceLogger: plugins.NewServiceLogger(p.Identity.Name),
+		ServiceLogger: p.ServiceLogger,
 		PluginLogger:  p.PluginLogger,
 		Envs:          envs,
 		Debug:         p.Settings.Debug,

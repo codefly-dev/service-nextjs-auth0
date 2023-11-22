@@ -50,6 +50,7 @@ func (p *Service) LoadEndpoints() error {
 				return p.Wrapf(err, "cannot create grpc api")
 			}
 			p.Endpoints = append(p.Endpoints, p.GrpcEndpoint)
+			p.PluginLogger.DebugMe("HERE GRP %v", ep.Scope)
 			continue
 		case configurations.Rest:
 			p.RestEndpoint, err = endpoints.NewRestApiFromOpenAPI(p.Context(), ep, p.Local("api.swagger.json"))
@@ -57,6 +58,7 @@ func (p *Service) LoadEndpoints() error {
 				return p.Wrapf(err, "cannot create openapi api")
 			}
 			p.Endpoints = append(p.Endpoints, p.RestEndpoint)
+			p.PluginLogger.DebugMe("HERE REST %v", ep.Scope)
 			continue
 		}
 	}

@@ -68,9 +68,11 @@ func (p *Factory) Init(req *v1.InitRequest) (*factoryv1.InitResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &factoryv1.InitResponse{
-		Version:  p.Version(),
-		Channels: channels,
+		Version:   p.Version(),
+		Endpoints: p.Endpoints,
+		Channels:  channels,
 	}, nil
 }
 
@@ -402,7 +404,7 @@ func (p *Factory) CreateEndpoints() error {
 	p.Endpoints = append(p.Endpoints, grpc)
 
 	if p.Settings.CreateHttpEndpoint {
-		rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Visibility: "private"}, p.Local("api.swagger.json"))
+		rest, err := endpoints.NewRestApiFromOpenAPI(p.Context(), &configurations.Endpoint{Name: "rest", Scope: "private"}, p.Local("api.swagger.json"))
 		if err != nil {
 			return p.Wrapf(err, "cannot create openapi api")
 		}

@@ -7,4 +7,4 @@ use (
 	base
 )
 
-replace github.com/codefly-dev/core v0.0.17 => ../../../../codefly.dev/core
+replace github.com/codefly-dev/core v0.0.19 => ../../../../codefly.dev/core
