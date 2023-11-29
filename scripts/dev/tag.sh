@@ -3,7 +3,7 @@
 # Usage: ./update_version.sh <new_version>
 
 NEW_VERSION=$1
-YAML_FILE="cmd/info.yaml"
+YAML_FILE="agent.codefly.yaml"
 
 if [ -z "$NEW_VERSION" ]; then
     echo "Error: No version provided."
