@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/codefly-dev/core/agents/services"
 	agentsv1 "github.com/codefly-dev/core/proto/v1/go/agents"
 	"github.com/codefly-dev/core/runners"
+	"github.com/codefly-dev/core/templates"
 	"os"
 	"strings"
 
@@ -50,16 +50,40 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 	}, nil
 }
 
+type EnvLocal struct {
+	Envs []string
+}
+
+func (p *Runtime) GetEnv() ([]string, error) {
+	// read the env file for auth0
+	f, err := os.ReadFile(p.Local("auth0.env"))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot read auth0.env")
+	}
+	envs := strings.Split(string(f), "\n")
+	return envs, nil
+}
+
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer p.AgentLogger.Catch()
 
-	envs := os.Environ()
 	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
 	if err != nil {
 		return nil, p.Wrapf(err, "cannot convert network mappings")
 	}
-	for _, n := range nws {
-		envs = append(envs, fmt.Sprintf("NEXT_PUBLIC_%s", n))
+	local := EnvLocal{Envs: nws}
+	// Append Auth0
+	auth0, err := p.GetEnv()
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot get env")
+	}
+	local.Envs = append(local.Envs, auth0...)
+
+	// Generate the .env.local
+	err = templates.CopyAndApplyTemplate(shared.Embed(special),
+		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(p.Local(".env.local")), local)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot copy special template")
 	}
 
 	// Add the group
@@ -67,7 +91,7 @@ func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, 
 		Name:          p.Service.Identity.Name,
 		Bin:           "npm",
 		Args:          []string{"run", "dev"},
-		Envs:          envs,
+		Envs:          os.Environ(),
 		AgentLogger:   p.AgentLogger,
 		ServiceLogger: p.ServiceLogger,
 		Dir:           p.Location,
