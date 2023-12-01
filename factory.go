@@ -128,6 +128,11 @@ func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateRespons
 	}
 	p.AgentLogger.Info("tree: %s", out)
 
+	err = os.RemoveAll(p.Local("node_modules"))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot remove node_modules")
+	}
+
 	p.Runner = &runners.Runner{
 		Name:          p.Service.Identity.Name,
 		Bin:           "npm",
@@ -176,7 +181,32 @@ func (p *Factory) Build(req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, 
 	p.AgentLogger.Debugf("building docker image")
 	p.DebugMe("got dependency group %v", endpoints.CondensedOutput(req.DependencyEndpointGroup))
 
-	err := os.Remove(p.Local("codefly/builder/Dockerfile"))
+	// We want to use DNS to create NetworkMapping
+	networkMapping, err := p.Network(endpoints.FlattenEndpoints(p.Context(), req.DependencyEndpointGroup))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot create network mapping")
+	}
+
+	nws, err := network.ConvertToEnvironmentVariables(networkMapping)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert network mappings")
+	}
+	local := EnvLocal{Envs: nws}
+	// Append Auth0
+	auth0, err := p.GetEnv()
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot get env")
+	}
+	local.Envs = append(local.Envs, auth0...)
+
+	// Generate the .env.local
+	err = templates.CopyAndApplyTemplate(shared.Embed(special),
+		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(p.Local(".env.local")), local)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot copy special template")
+	}
+
+	err = os.Remove(p.Local("codefly/builder/Dockerfile"))
 	if err != nil {
 		return nil, p.Wrapf(err, "cannot remove dockerfile")
 	}
