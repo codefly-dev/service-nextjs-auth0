@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"os"
+	"strings"
+
 	"github.com/codefly-dev/core/agents/services"
 	agentsv1 "github.com/codefly-dev/core/proto/v1/go/agents"
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/templates"
-	"os"
-	"strings"
 
 	"github.com/codefly-dev/core/agents/helpers/code"
 	"github.com/codefly-dev/core/agents/network"
@@ -52,16 +53,6 @@ func (p *Runtime) Configure(req *runtimev1.ConfigureRequest) (*runtimev1.Configu
 
 type EnvLocal struct {
 	Envs []string
-}
-
-func (p *Runtime) GetEnv() ([]string, error) {
-	// read the env file for auth0
-	f, err := os.ReadFile(p.Local("auth0.env"))
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot read auth0.env")
-	}
-	envs := strings.Split(string(f), "\n")
-	return envs, nil
 }
 
 func (p *Runtime) Start(req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {

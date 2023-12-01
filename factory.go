@@ -2,12 +2,22 @@ package main
 
 import (
 	"embed"
+	"strings"
+
+	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
+
+	"os"
+
 	"github.com/codefly-dev/core/agents/communicate"
+	"github.com/codefly-dev/core/agents/endpoints"
+	"github.com/codefly-dev/core/agents/network"
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/configurations"
 	agentsv1 "github.com/codefly-dev/core/proto/v1/go/agents"
+	basev1 "github.com/codefly-dev/core/proto/v1/go/base"
 	servicev1 "github.com/codefly-dev/core/proto/v1/go/services"
 	factoryv1 "github.com/codefly-dev/core/proto/v1/go/services/factory"
+	runtimev1 "github.com/codefly-dev/core/proto/v1/go/services/runtime"
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/shared"
 	"github.com/codefly-dev/core/templates"
@@ -67,15 +77,10 @@ func (p *Factory) NewCreateCommunicate() (*communicate.ClientContext, error) {
 	return client, nil
 }
 
-type Deployment struct {
-	Replicas int
-}
-
 type CreateConfiguration struct {
-	Image      *configurations.DockerImage
-	Deployment Deployment
-	Domain     string
-	Envs       []string
+	Image  *configurations.DockerImage
+	Domain string
+	Envs   []string
 }
 
 func (p *Factory) Create(req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
@@ -167,13 +172,107 @@ type DockerTemplating struct {
 }
 
 func (p *Factory) Build(req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, error) {
-	p.AgentLogger.Debugf("building docker image")
 
+	p.AgentLogger.Debugf("building docker image")
+	p.DebugMe("got dependency group %v", endpoints.CondensedOutput(req.DependencyEndpointGroup))
+
+	err := os.Remove(p.Local("codefly/builder/Dockerfile"))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot remove dockerfile")
+	}
+	err = p.Templates(nil, services.WithBuilder(builder))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot copy and apply template")
+	}
+	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
+		Root:       p.Location,
+		Dockerfile: "codefly/builder/Dockerfile",
+		Image:      p.DockerImage().Name,
+		Tag:        p.DockerImage().Tag,
+	})
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot create builder")
+	}
+	builder.WithLogger(p.AgentLogger)
+	_, err = builder.Build()
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot build image")
+	}
 	return &factoryv1.BuildResponse{}, nil
 }
 
+type Deployment struct {
+	Replicas int
+}
+
+type DeploymentParameter struct {
+	Image *configurations.DockerImage
+	*services.Information
+	Deployment
+	ConfigMap map[string]string
+}
+
+func EnvsAsMap(envs []string) map[string]string {
+	m := make(map[string]string)
+	for _, env := range envs {
+		split := strings.SplitN(env, "=", 2)
+		if len(split) == 2 {
+			m[split[0]] = split[1]
+		}
+	}
+	return m
+}
+
 func (p *Factory) Deploy(req *factoryv1.DeploymentRequest) (*factoryv1.DeploymentResponse, error) {
+	defer p.AgentLogger.Catch()
+
+	// We want to use DNS to create NetworkMapping
+	networkMapping, err := p.Network(endpoints.FlattenEndpoints(p.Context(), req.DependencyEndpointGroup))
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot create network mapping")
+	}
+
+	nws, err := network.ConvertToEnvironmentVariables(networkMapping)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot convert network mappings")
+	}
+	local := EnvLocal{Envs: nws}
+	// Append Auth0
+	auth0, err := p.GetEnv()
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot get env")
+	}
+	local.Envs = append(local.Envs, auth0...)
+
+	deploy := DeploymentParameter{ConfigMap: EnvsAsMap(local.Envs), Image: p.DockerImage(), Information: p.Information, Deployment: Deployment{Replicas: 1}}
+	err = p.Templates(deploy,
+		services.WithDeploymentFor(deployment, "kustomize/base", templates.WithOverrideAll()),
+		services.WithDeploymentFor(deployment, "kustomize/overlays/environment",
+			services.WithDestination("kustomize/overlays/%s", req.Environment.Name), templates.WithOverrideAll()),
+	)
+	if err != nil {
+		return nil, err
+	}
 	return &factoryv1.DeploymentResponse{}, nil
+}
+
+func (p *Factory) Network(es []*basev1.Endpoint) ([]*runtimev1.NetworkMapping, error) {
+	p.DebugMe("in network: %v", endpoints.Condensed(es))
+	pm, err := network.NewServiceDnsManager(p.Context(), p.Identity)
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot create network manager")
+	}
+	for _, endpoint := range es {
+		err = pm.Expose(endpoint)
+		if err != nil {
+			return nil, p.Wrapf(err, "cannot add grpc endpoint to network manager")
+		}
+	}
+	err = pm.Reserve()
+	if err != nil {
+		return nil, p.Wrapf(err, "cannot reserve ports")
+	}
+	return pm.NetworkMapping()
 }
 
 func (p *Factory) CreateEndpoints() error {
@@ -192,3 +291,6 @@ var builder embed.FS
 
 //go:embed templates/special
 var special embed.FS
+
+//go:embed templates/deployment
+var deployment embed.FS

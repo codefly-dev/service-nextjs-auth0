@@ -2,6 +2,9 @@ package main
 
 import (
 	"embed"
+	"os"
+	"strings"
+
 	"github.com/codefly-dev/core/agents"
 	"github.com/codefly-dev/core/shared"
 
@@ -35,6 +38,16 @@ func main() {
 	agents.Register(
 		services.NewFactoryAgent(agent.Of(configurations.AgentFactoryService), NewFactory()),
 		services.NewRuntimeAgent(agent.Of(configurations.AgentRuntimeService), NewRuntime()))
+}
+
+func (s *Service) GetEnv() ([]string, error) {
+	// read the env file for auth0
+	f, err := os.ReadFile(s.Local("auth0.env"))
+	if err != nil {
+		return nil, s.Wrapf(err, "cannot read auth0.env")
+	}
+	envs := strings.Split(string(f), "\n")
+	return envs, nil
 }
 
 //go:embed agent.codefly.yaml
