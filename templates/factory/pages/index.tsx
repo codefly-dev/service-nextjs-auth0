@@ -27,7 +27,7 @@ const Home = ({ endpoints }) => {
 export async function getServerSideProps() {
   const endpoints = {};
   Object.keys(process.env).forEach((key) => {
-    if (key.startsWith("CODEFLY-ENDPOINT__")) {
+    if (key.startsWith("CODEFLY_ENDPOINT__")) {
       endpoints[key] = process.env[key];
     }
   });
