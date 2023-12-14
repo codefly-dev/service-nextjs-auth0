@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/configurations"
+	agentv1 "github.com/codefly-dev/core/generated/v1/go/proto/services/agent"
 )
 
 // Agent version
@@ -17,7 +19,6 @@ var agent = shared.Must(configurations.LoadFromFs[configurations.Agent](shared.E
 
 type Settings struct {
 	Debug bool `yaml:"debug"` // Developer only
-	Watch bool `yaml:"watch"`
 }
 
 type Service struct {
@@ -27,17 +28,27 @@ type Service struct {
 	*Settings
 }
 
+func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv1.AgentInformationRequest) (*agentv1.AgentInformation, error) {
+	return &agentv1.AgentInformation{
+		Capabilities: []*agentv1.Capability{
+			{Type: agentv1.Capability_FACTORY},
+			{Type: agentv1.Capability_RUNTIME},
+		},
+	}, nil
+}
+
 func NewService() *Service {
 	return &Service{
-		Base:     services.NewServiceBase(agent.Of(configurations.AgentService)),
+		Base:     services.NewServiceBase(shared.NewContext(), agent.Of(configurations.ServiceAgent)),
 		Settings: &Settings{},
 	}
 }
 
 func main() {
 	agents.Register(
-		services.NewFactoryAgent(agent.Of(configurations.AgentFactoryService), NewFactory()),
-		services.NewRuntimeAgent(agent.Of(configurations.AgentRuntimeService), NewRuntime()))
+		services.NewServiceAgent(agent.Of(configurations.ServiceAgent), NewService()),
+		services.NewFactoryAgent(agent.Of(configurations.RuntimeServiceAgent), NewFactory()),
+		services.NewRuntimeAgent(agent.Of(configurations.FactoryServiceAgent), NewRuntime()))
 }
 
 func (s *Service) GetEnv() ([]string, error) {
