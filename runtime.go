@@ -6,14 +6,13 @@ import (
 	"strings"
 
 	"github.com/codefly-dev/core/agents/services"
-	agentsv1 "github.com/codefly-dev/core/generated/v1/go/proto/agents"
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/templates"
 
 	"github.com/codefly-dev/core/agents/helpers/code"
 	"github.com/codefly-dev/core/agents/network"
-	servicev1 "github.com/codefly-dev/core/generated/v1/go/proto/services"
-	runtimev1 "github.com/codefly-dev/core/generated/v1/go/proto/services/runtime"
+	agentv1 "github.com/codefly-dev/core/generated/go/services/agent/v1"
+	runtimev1 "github.com/codefly-dev/core/generated/go/services/runtime/v1"
 	"github.com/codefly-dev/core/shared"
 )
 
@@ -30,21 +29,19 @@ func NewRuntime() *Runtime {
 	}
 }
 
-func (p *Runtime) Init(ctx context.Context, req *servicev1.InitRequest) (*runtimev1.InitResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Runtime) Init(ctx context.Context, req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
+	defer s.Wool.Catch()
 
-	err := p.Base.Init(req, p.Settings)
+	err := s.Base.Init(ctx, req.Identity, s.Settings)
 	if err != nil {
-		return p.Base.RuntimeInitResponseError(err)
+		return s.Base.RuntimeInitResponseError(err)
 	}
 
-	return p.Base.RuntimeInitResponse(p.Endpoints)
+	return s.Base.RuntimeInitResponse(s.Endpoints)
 }
 
-func (p *Runtime) Configure(ctx context.Context, req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
-	defer p.AgentLogger.Catch()
-
-	p.ServiceLogger.Info("watching code changes")
+func (s *Runtime) Configure(ctx context.Context, req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
+	defer s.Wool.Catch()
 
 	return &runtimev1.ConfigureResponse{
 		Status: services.ConfigureSuccess(),
@@ -55,47 +52,45 @@ type EnvLocal struct {
 	Envs []string
 }
 
-func (p *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
+	defer s.Wool.Catch()
 
 	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot convert network mappings")
+		return nil, s.Wrapf(err, "cannot convert network mappings")
 	}
 	local := EnvLocal{Envs: nws}
 	// Append Auth0
-	auth0, err := p.GetEnv()
+	auth0, err := s.GetEnv()
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot get env")
+		return nil, s.Wrapf(err, "cannot get env")
 	}
 	local.Envs = append(local.Envs, auth0...)
 
 	// Generate the .env.local
 	err = templates.CopyAndApplyTemplate(shared.Embed(special),
-		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(p.Local(".env.local")), local)
+		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot copy special template")
+		return nil, s.Wrapf(err, "cannot copy special template")
 	}
 
 	// Add the group
-	p.Runner = &runners.Runner{
-		Name:          p.Service.Identity.Name,
-		Bin:           "npm",
-		Args:          []string{"run", "dev"},
-		Envs:          os.Environ(),
-		AgentLogger:   p.AgentLogger,
-		ServiceLogger: p.ServiceLogger,
-		Dir:           p.Location,
-		Debug:         p.Debug,
+	s.Runner = &runners.Runner{
+		Name:  s.Service.Identity.Name,
+		Bin:   "npm",
+		Args:  []string{"run", "dev"},
+		Envs:  os.Environ(),
+		Dir:   s.Location,
+		Debug: s.Debug,
 	}
-	err = p.Runner.Init(p.Context())
+	err = s.Runner.Init(ctx)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot start service")
+		return nil, s.Wrapf(err, "cannot start service")
 	}
-	//p.Runner.Wait = true
-	tracker, err := p.Runner.Run(p.Context())
+	//s.Runner.Wait = true
+	tracker, err := s.Runner.Run(ctx)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot start go program")
+		return nil, s.Wrapf(err, "cannot start go program")
 	}
 
 	return &runtimev1.StartResponse{
@@ -104,52 +99,52 @@ func (p *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	}, nil
 }
 
-func (p *Runtime) Information(ctx context.Context, req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
+func (s *Runtime) Information(ctx context.Context, req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
 	return &runtimev1.InformationResponse{}, nil
 }
 
-func (p *Runtime) Stop(ctx context.Context, req *runtimev1.StopRequest) (*runtimev1.StopResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Runtime) Stop(ctx context.Context, req *runtimev1.StopRequest) (*runtimev1.StopResponse, error) {
+	defer s.Wool.Catch()
 
-	p.AgentLogger.Debugf("stopping service")
-	err := p.Runner.Kill()
+	s.Wool.Debug("stopping service")
+	err := s.Runner.Kill()
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot kill go")
 	}
 
-	err = p.Base.Stop()
+	err = s.Base.Stop()
 	if err != nil {
 		return nil, err
 	}
 	return &runtimev1.StopResponse{}, nil
 }
 
-func (p *Runtime) Communicate(ctx context.Context, req *agentsv1.Engage) (*agentsv1.InformationRequest, error) {
-	return p.Base.Communicate(ctx, req)
+func (s *Runtime) Communicate(ctx context.Context, req *agentv1.Engage) (*agentv1.InformationRequest, error) {
+	return s.Base.Communicate(ctx, req)
 }
 
 /* Details
 
  */
 
-func (p *Runtime) EventHandler(event code.Change) error {
-	p.AgentLogger.Debugf("got an event: %v", event)
+func (s *Runtime) EventHandler(event code.Change) error {
+	s.Wool.Debug("got an event: %v")
 	if strings.Contains(event.Path, "proto") {
-		p.WantSync()
+		s.WantSync()
 	} else {
-		p.WantRestart()
+		s.WantRestart()
 	}
-	err := p.Runner.Init(context.Background())
+	err := s.Runner.Init(context.Background())
 	if err != nil {
-		p.ServiceLogger.Info("Detected code changes: still cannot restart: %v", err)
+		// s.ServiceLogger.Info("Detected code changes: still cannot restart: %v", err)
 		return err
 	}
-	p.ServiceLogger.Info("Detected code changes: restarting")
+	// s.ServiceLogger.Info("Detected code changes: restarting")
 	return nil
 }
 
-func (p *Runtime) Network() ([]*runtimev1.NetworkMapping, error) {
-	pm, err := network.NewServicePortManager(p.Context(), p.Identity, p.Endpoints...)
+func (s *Runtime) Network(ctx context.Context) ([]*runtimev1.NetworkMapping, error) {
+	pm, err := network.NewServicePortManager(ctx, s.Identity, s.Endpoints...)
 	if err != nil {
 		return nil, shared.Wrapf(err, "cannot create default endpoint")
 	}

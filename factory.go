@@ -3,20 +3,18 @@ package main
 import (
 	"context"
 	"embed"
+	"os"
 	"strings"
 
-	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
-
-	"os"
-
 	"github.com/codefly-dev/core/agents/endpoints"
+	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
 	"github.com/codefly-dev/core/agents/network"
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/configurations"
-	basev1 "github.com/codefly-dev/core/generated/v1/go/proto/base"
-	servicev1 "github.com/codefly-dev/core/generated/v1/go/proto/services"
-	factoryv1 "github.com/codefly-dev/core/generated/v1/go/proto/services/factory"
-	runtimev1 "github.com/codefly-dev/core/generated/v1/go/proto/services/runtime"
+	basev1 "github.com/codefly-dev/core/generated/go/base/v1"
+	factoryv1 "github.com/codefly-dev/core/generated/go/services/factory/v1"
+	runtimev1 "github.com/codefly-dev/core/generated/go/services/runtime/v1"
+
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/shared"
 	"github.com/codefly-dev/core/templates"
@@ -34,22 +32,22 @@ func NewFactory() *Factory {
 	}
 }
 
-func (p *Factory) Init(ctx context.Context, req *servicev1.InitRequest) (*factoryv1.InitResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Factory) Init(ctx context.Context, req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
+	defer s.Wool.Catch()
 
-	err := p.Base.Init(req, p.Settings)
+	err := s.Base.Init(ctx, req.Identity, s.Settings)
 	if err != nil {
 		return nil, err
 	}
 
-	readme, err := templates.ApplyTemplateFrom(shared.Embed(factory), "templates/factory/README.md", p.Information)
+	readme, err := templates.ApplyTemplateFrom(shared.Embed(factory), "templates/factory/README.md", s.Information)
 	if err != nil {
 		return nil, err
 	}
 
 	return &factoryv1.InitResponse{
-		Version:   p.Version(),
-		Endpoints: p.Endpoints,
+		Version:   s.Version(),
+		Endpoints: s.Endpoints,
 		ReadMe:    readme,
 	}, nil
 }
@@ -60,63 +58,61 @@ type CreateConfiguration struct {
 	Envs   []string
 }
 
-func (p *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
+	defer s.Wool.Catch()
 
 	ignores := []string{"node_modules", ".next", ".idea"}
 
-	err := p.Templates(p.Context(), p.Information, services.WithFactory(factory, ignores...), services.WithBuilder(builder))
+	err := s.Templates(ctx, s.Information, services.WithFactory(factory, ignores...), services.WithBuilder(builder))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot copy and apply template")
+		return nil, s.Wrapf(err, "cannot copy and apply template")
 	}
-	// Need to handle the case of pages/_app.tsx
+	// Need to handle the case of pages/_aps.tsx
 	err = templates.Copy(shared.Embed(special),
-		shared.NewFile("templates/special/pages/app.tsx"), shared.NewFile(p.Local("pages/_app.tsx")))
+		shared.NewFile("templates/special/pages/aps.tsx"), shared.NewFile(s.Local("pages/_aps.tsx")))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot copy special template")
+		return nil, s.Wrapf(err, "cannot copy special template")
 	}
 
-	out, err := shared.GenerateTree(p.Location, " ")
-	if err != nil {
-		return nil, err
-	}
-	p.AgentLogger.Info("tree: %s", out)
+	// out, err := shared.GenerateTree(s.Location, " ")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// s.Wool.Info("tree: %s", out)
 
-	err = os.RemoveAll(p.Local("node_modules"))
+	err = os.RemoveAll(s.Local("node_modules"))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot remove node_modules")
-	}
-
-	p.Runner = &runners.Runner{
-		Name:          p.Service.Identity.Name,
-		Bin:           "npm",
-		Args:          []string{"install", "ci"},
-		AgentLogger:   p.AgentLogger,
-		ServiceLogger: p.ServiceLogger,
-		Dir:           p.Location,
-		Debug:         p.Debug,
-	}
-	err = p.Runner.Init(p.Context())
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot start service")
-	}
-	p.DebugMe("running npm install")
-	_, err = p.Runner.Run(p.Context())
-	if err != nil {
-		return nil, p.Wrapf(err, "cannot start go program")
+		return nil, s.Wrapf(err, "cannot remove node_modules")
 	}
 
-	return p.CreateResponse(ctx, p.Settings, p.Endpoints...)
+	s.Runner = &runners.Runner{
+		Name:  s.Service.Identity.Name,
+		Bin:   "npm",
+		Args:  []string{"install", "ci"},
+		Dir:   s.Location,
+		Debug: s.Debug,
+	}
+	err = s.Runner.Init(ctx)
+	if err != nil {
+		return nil, s.Wrapf(err, "cannot start service")
+	}
+	s.DebugMe("running npm install")
+	_, err = s.Runner.Run(ctx)
+	if err != nil {
+		return nil, s.Wrapf(err, "cannot start go program")
+	}
+
+	return s.CreateResponse(ctx, s.Settings, s.Endpoints...)
 }
 
-func (p *Factory) Update(ctx context.Context, req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Factory) Update(ctx context.Context, req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
+	defer s.Wool.Catch()
 
 	return &factoryv1.UpdateResponse{}, nil
 }
 
-func (p *Factory) Sync(ctx context.Context, req *factoryv1.SyncRequest) (*factoryv1.SyncResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Factory) Sync(ctx context.Context, req *factoryv1.SyncRequest) (*factoryv1.SyncResponse, error) {
+	defer s.Wool.Catch()
 
 	return &factoryv1.SyncResponse{}, nil
 }
@@ -130,57 +126,56 @@ type DockerTemplating struct {
 	Envs []Env
 }
 
-func (p *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, error) {
+func (s *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, error) {
 
-	p.AgentLogger.Debugf("building docker image")
-	p.DebugMe("got dependency group %v", endpoints.CondensedOutput(req.DependencyEndpointGroup))
+	s.Wool.Debug("building docker image")
 
 	// We want to use DNS to create NetworkMapping
-	networkMapping, err := p.Network(endpoints.FlattenEndpoints(p.Context(), req.DependencyEndpointGroup))
+	networkMapping, err := s.Network(endpoints.FlattenEndpoints(ctx, req.DependencyEndpointGroup))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot create network mapping")
+		return nil, s.Wrapf(err, "cannot create network mapping")
 	}
 
 	nws, err := network.ConvertToEnvironmentVariables(networkMapping)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot convert network mappings")
+		return nil, s.Wrapf(err, "cannot convert network mappings")
 	}
 	local := EnvLocal{Envs: nws}
 	// Append Auth0
-	auth0, err := p.GetEnv()
+	auth0, err := s.GetEnv()
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot get env")
+		return nil, s.Wrapf(err, "cannot get env")
 	}
 	local.Envs = append(local.Envs, auth0...)
 
 	// Generate the .env.local
 	err = templates.CopyAndApplyTemplate(shared.Embed(special),
-		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(p.Local(".env.local")), local)
+		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot copy special template")
+		return nil, s.Wrapf(err, "cannot copy special template")
 	}
 
-	err = os.Remove(p.Local("codefly/builder/Dockerfile"))
+	err = os.Remove(s.Local("codefly/builder/Dockerfile"))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot remove dockerfile")
+		return nil, s.Wrapf(err, "cannot remove dockerfile")
 	}
-	err = p.Templates(nil, services.WithBuilder(builder))
+	err = s.Templates(nil, services.WithBuilder(builder))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot copy and apply template")
+		return nil, s.Wrapf(err, "cannot copy and apply template")
 	}
 	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
-		Root:       p.Location,
+		Root:       s.Location,
 		Dockerfile: "codefly/builder/Dockerfile",
-		Image:      p.DockerImage().Name,
-		Tag:        p.DockerImage().Tag,
+		Image:      s.DockerImage().Name,
+		Tag:        s.DockerImage().Tag,
 	})
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot create builder")
+		return nil, s.Wrapf(err, "cannot create builder")
 	}
-	builder.WithLogger(p.AgentLogger)
+	// builder.WithLogger(s.Wool)
 	_, err = builder.Build()
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot build image")
+		return nil, s.Wrapf(err, "cannot build image")
 	}
 	return &factoryv1.BuildResponse{}, nil
 }
@@ -207,29 +202,29 @@ func EnvsAsMap(envs []string) map[string]string {
 	return m
 }
 
-func (p *Factory) Deploy(ctx context.Context, req *factoryv1.DeploymentRequest) (*factoryv1.DeploymentResponse, error) {
-	defer p.AgentLogger.Catch()
+func (s *Factory) Deploy(ctx context.Context, req *factoryv1.DeploymentRequest) (*factoryv1.DeploymentResponse, error) {
+	defer s.Wool.Catch()
 
 	// We want to use DNS to create NetworkMapping
-	networkMapping, err := p.Network(endpoints.FlattenEndpoints(p.Context(), req.DependencyEndpointGroup))
+	networkMapping, err := s.Network(endpoints.FlattenEndpoints(ctx, req.DependencyEndpointGroup))
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot create network mapping")
+		return nil, s.Wrapf(err, "cannot create network mapping")
 	}
 
 	nws, err := network.ConvertToEnvironmentVariables(networkMapping)
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot convert network mappings")
+		return nil, s.Wrapf(err, "cannot convert network mappings")
 	}
 	local := EnvLocal{Envs: nws}
 	// Append Auth0
-	auth0, err := p.GetEnv()
+	auth0, err := s.GetEnv()
 	if err != nil {
-		return nil, p.Wrapf(err, "cannot get env")
+		return nil, s.Wrapf(err, "cannot get env")
 	}
 	local.Envs = append(local.Envs, auth0...)
 	//
-	//deploy := DeploymentParameter{ConfigMap: EnvsAsMap(local.Envs), Image: p.DockerImage(), Information: p.Information, Deployment: Deployment{Replicas: 1}}
-	//err = p.Templates(deploy,
+	//deploy := DeploymentParameter{ConfigMap: EnvsAsMap(local.Envs), Image: s.DockerImage(), Information: s.Information, Deployment: Deployment{Replicas: 1}}
+	//err = s.Templates(deploy,
 	//	services.WithDeploymentFor(deployment, "kustomize/base", templates.WithOverrideAll()),
 	//	services.WithDeploymentFor(deployment, "kustomize/overlays/environment",
 	//		services.WithDestination("kustomize/overlays/%s", req.Environment.Name), templates.WithOverrideAll()),
@@ -240,27 +235,27 @@ func (p *Factory) Deploy(ctx context.Context, req *factoryv1.DeploymentRequest) 
 	return &factoryv1.DeploymentResponse{}, nil
 }
 
-func (p *Factory) Network(es []*basev1.Endpoint) ([]*runtimev1.NetworkMapping, error) {
-	//p.DebugMe("in network: %v", endpoints.Condensed(es))
-	//pm, err := network.NewServiceDnsManager(p.Context(), p.Identity)
+func (s *Factory) Network(es []*basev1.Endpoint) ([]*runtimev1.NetworkMapping, error) {
+	//s.DebugMe("in network: %v", endpoints.Condensed(es))
+	//pm, err := network.NewServiceDnsManager(ctx, s.Identity)
 	//if err != nil {
-	//	return nil, p.Wrapf(err, "cannot create network manager")
+	//	return nil, s.Wrapf(err, "cannot create network manager")
 	//}
 	//for _, endpoint := range es {
 	//	err = pm.Expose(endpoint)
 	//	if err != nil {
-	//		return nil, p.Wrapf(err, "cannot add grpc endpoint to network manager")
+	//		return nil, s.Wrapf(err, "cannot add grpc endpoint to network manager")
 	//	}
 	//}
 	//err = pm.Reserve()
 	//if err != nil {
-	//	return nil, p.Wrapf(err, "cannot reserve ports")
+	//	return nil, s.Wrapf(err, "cannot reserve ports")
 	//}
 	//return pm.NetworkMapping()
 	return nil, nil
 }
 
-func (p *Factory) CreateEndpoints() error {
+func (s *Factory) CreateEndpoints() error {
 
 	return nil
 }

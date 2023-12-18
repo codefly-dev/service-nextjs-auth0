@@ -7,11 +7,10 @@ import (
 	"strings"
 
 	"github.com/codefly-dev/core/agents"
-	"github.com/codefly-dev/core/shared"
-
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/configurations"
-	agentv1 "github.com/codefly-dev/core/generated/v1/go/proto/services/agent"
+	agentv1 "github.com/codefly-dev/core/generated/go/services/agent/v1"
+	"github.com/codefly-dev/core/shared"
 )
 
 // Agent version
