@@ -68,7 +68,7 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	local.Envs = append(local.Envs, auth0...)
 
 	// Generate the .env.local
-	err = templates.CopyAndApplyTemplate(shared.Embed(special),
+	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
 		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
 	if err != nil {
 		return nil, s.Wrapf(err, "cannot copy special template")

@@ -68,8 +68,8 @@ func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*fa
 		return nil, s.Wrapf(err, "cannot copy and apply template")
 	}
 	// Need to handle the case of pages/_aps.tsx
-	err = templates.Copy(shared.Embed(special),
-		shared.NewFile("templates/special/pages/aps.tsx"), shared.NewFile(s.Local("pages/_aps.tsx")))
+	err = templates.Copy(ctx, shared.Embed(special),
+		shared.NewFile("templates/special/pages/app.tsx"), shared.NewFile(s.Local("pages/_app.tsx")))
 	if err != nil {
 		return nil, s.Wrapf(err, "cannot copy special template")
 	}
@@ -149,7 +149,7 @@ func (s *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*fact
 	local.Envs = append(local.Envs, auth0...)
 
 	// Generate the .env.local
-	err = templates.CopyAndApplyTemplate(shared.Embed(special),
+	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
 		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
 	if err != nil {
 		return nil, s.Wrapf(err, "cannot copy special template")
@@ -159,7 +159,7 @@ func (s *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*fact
 	if err != nil {
 		return nil, s.Wrapf(err, "cannot remove dockerfile")
 	}
-	err = s.Templates(nil, services.WithBuilder(builder))
+	err = s.Templates(ctx, services.WithBuilder(builder))
 	if err != nil {
 		return nil, s.Wrapf(err, "cannot copy and apply template")
 	}
