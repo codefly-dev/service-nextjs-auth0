@@ -107,9 +107,9 @@ func (s *Runtime) Stop(ctx context.Context, req *runtimev1.StopRequest) (*runtim
 	defer s.Wool.Catch()
 
 	s.Wool.Debug("stopping service")
-	err := s.Runner.Kill()
+	err := s.Runner.Kill(ctx)
 	if err != nil {
-		return nil, shared.Wrapf(err, "cannot kill go")
+		return nil, s.Wrapf(err, "cannot kill go")
 	}
 
 	err = s.Base.Stop()
@@ -146,11 +146,11 @@ func (s *Runtime) EventHandler(event code.Change) error {
 func (s *Runtime) Network(ctx context.Context) ([]*runtimev1.NetworkMapping, error) {
 	pm, err := network.NewServicePortManager(ctx, s.Identity, s.Endpoints...)
 	if err != nil {
-		return nil, shared.Wrapf(err, "cannot create default endpoint")
+		return nil, s.Wrapf(err, "cannot create default endpoint")
 	}
-	err = pm.Reserve()
+	err = pm.Reserve(ctx)
 	if err != nil {
-		return nil, shared.Wrapf(err, "cannot reserve ports")
+		return nil, s.Wrapf(err, "cannot reserve ports")
 	}
-	return pm.NetworkMapping()
+	return pm.NetworkMapping(ctx)
 }

@@ -40,15 +40,15 @@ func (s *Factory) Init(ctx context.Context, req *factoryv1.InitRequest) (*factor
 		return nil, err
 	}
 
-	readme, err := templates.ApplyTemplateFrom(shared.Embed(factory), "templates/factory/README.md", s.Information)
+	gettingStarted, err := templates.ApplyTemplateFrom(shared.Embed(factory), "templates/factory/GETTING_STARTED.md", s.Information)
 	if err != nil {
 		return nil, err
 	}
 
 	return &factoryv1.InitResponse{
-		Version:   s.Version(),
-		Endpoints: s.Endpoints,
-		ReadMe:    readme,
+		Version:        s.Version(),
+		Endpoints:      s.Endpoints,
+		GettingStarted: gettingStarted,
 	}, nil
 }
 
@@ -173,7 +173,7 @@ func (s *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*fact
 		return nil, s.Wrapf(err, "cannot create builder")
 	}
 	// builder.WithLogger(s.Wool)
-	_, err = builder.Build()
+	_, err = builder.Build(ctx)
 	if err != nil {
 		return nil, s.Wrapf(err, "cannot build image")
 	}

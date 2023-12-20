@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"embed"
+	"github.com/codefly-dev/core/templates"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"os"
 	"strings"
 
@@ -28,17 +31,35 @@ type Service struct {
 }
 
 func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv1.AgentInformationRequest) (*agentv1.AgentInformation, error) {
+	defer s.Wool.Catch()
+
+	s.Wool.Debug("get agent information")
+
+	readme, err := templates.ApplyTemplateFrom(shared.Embed(readme), "templates/agent/README.md", s.Information)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	s.DebugMe("readme success")
+
 	return &agentv1.AgentInformation{
 		Capabilities: []*agentv1.Capability{
 			{Type: agentv1.Capability_FACTORY},
 			{Type: agentv1.Capability_RUNTIME},
 		},
+		Languages: []*agentv1.Language{
+			{Type: agentv1.Language_TYPESCRIPT},
+			{Type: agentv1.Language_JAVASCRIPT},
+		},
+		Protocols: []*agentv1.Protocol{
+			{Type: agentv1.Protocol_HTTP},
+		},
+		ReadMe: readme,
 	}, nil
 }
 
 func NewService() *Service {
 	return &Service{
-		Base:     services.NewServiceBase(shared.NewContext(), agent.Of(configurations.ServiceAgent)),
+		Base:     services.NewServiceBase(context.Background(), agent.Of(configurations.ServiceAgent)),
 		Settings: &Settings{},
 	}
 }
@@ -62,3 +83,6 @@ func (s *Service) GetEnv() ([]string, error) {
 
 //go:embed agent.codefly.yaml
 var info embed.FS
+
+//go:embed templates/agent
+var readme embed.FS
