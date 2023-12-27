@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"os"
-	"strings"
-
-	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/templates"
+	"github.com/codefly-dev/core/wool"
+	"os"
 
 	"github.com/codefly-dev/core/agents/helpers/code"
 	"github.com/codefly-dev/core/agents/network"
@@ -29,23 +27,21 @@ func NewRuntime() *Runtime {
 	}
 }
 
+func (s *Runtime) Load(ctx context.Context, req *runtimev1.LoadRequest) (*runtimev1.LoadResponse, error) {
+	defer s.Wool.Catch()
+
+	err := s.Base.Load(ctx, req.Identity, s.Settings)
+	if err != nil {
+		return s.Base.Runtime.LoadError(err)
+	}
+
+	return s.Base.Runtime.LoadResponse(s.Endpoints)
+}
+
 func (s *Runtime) Init(ctx context.Context, req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer s.Wool.Catch()
 
-	err := s.Base.Init(ctx, req.Identity, s.Settings)
-	if err != nil {
-		return s.Base.RuntimeInitResponseError(err)
-	}
-
-	return s.Base.RuntimeInitResponse(s.Endpoints)
-}
-
-func (s *Runtime) Configure(ctx context.Context, req *runtimev1.ConfigureRequest) (*runtimev1.ConfigureResponse, error) {
-	defer s.Wool.Catch()
-
-	return &runtimev1.ConfigureResponse{
-		Status: services.ConfigureSuccess(),
-	}, nil
+	return s.Base.Runtime.InitResponse()
 }
 
 type EnvLocal struct {
@@ -57,13 +53,13 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 
 	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot convert network mappings")
+		return s.Base.Runtime.StartError(err)
 	}
 	local := EnvLocal{Envs: nws}
 	// Append Auth0
 	auth0, err := s.GetEnv()
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot get env")
+		return s.Base.Runtime.StartError(err)
 	}
 	local.Envs = append(local.Envs, auth0...)
 
@@ -71,32 +67,25 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
 		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot copy special template")
+		return s.Base.Runtime.StartError(err)
 	}
 
 	// Add the group
 	s.Runner = &runners.Runner{
-		Name:  s.Service.Identity.Name,
-		Bin:   "npm",
-		Args:  []string{"run", "dev"},
-		Envs:  os.Environ(),
-		Dir:   s.Location,
-		Debug: s.Debug,
+		Name: s.Service.Identity.Name,
+		Bin:  "npm",
+		Args: []string{"run", "dev"},
+		Envs: os.Environ(),
+		Dir:  s.Location,
 	}
-	err = s.Runner.Init(ctx)
+	out, err := s.Runner.Run(ctx)
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot start service")
+		return s.Base.Runtime.StartError(err)
 	}
-	//s.Runner.Wait = true
-	tracker, err := s.Runner.Run(ctx)
-	if err != nil {
-		return nil, s.Wrapf(err, "cannot start go program")
-	}
+	tracker := runners.TrackedProcess{PID: out.PID}
+	s.Info("starting", wool.Field("pid", out.PID))
 
-	return &runtimev1.StartResponse{
-		Status:   services.StartSuccess(),
-		Trackers: []*runtimev1.Tracker{tracker.Proto()},
-	}, nil
+	return s.Runtime.StartResponse([]*runtimev1.Tracker{tracker.Proto()})
 }
 
 func (s *Runtime) Information(ctx context.Context, req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
@@ -107,12 +96,12 @@ func (s *Runtime) Stop(ctx context.Context, req *runtimev1.StopRequest) (*runtim
 	defer s.Wool.Catch()
 
 	s.Wool.Debug("stopping service")
-	err := s.Runner.Kill(ctx)
-	if err != nil {
-		return nil, s.Wrapf(err, "cannot kill go")
-	}
+	//err := s.Runner.Kill(ctx)
+	//if err != nil {
+	//	return nil, s.Wrapf(err, "cannot kill go")
+	//}
 
-	err = s.Base.Stop()
+	err := s.Base.Stop()
 	if err != nil {
 		return nil, err
 	}
@@ -129,28 +118,17 @@ func (s *Runtime) Communicate(ctx context.Context, req *agentv1.Engage) (*agentv
 
 func (s *Runtime) EventHandler(event code.Change) error {
 	s.Wool.Debug("got an event: %v")
-	if strings.Contains(event.Path, "proto") {
-		s.WantSync()
-	} else {
-		s.WantRestart()
-	}
-	err := s.Runner.Init(context.Background())
-	if err != nil {
-		// s.ServiceLogger.Info("Detected code changes: still cannot restart: %v", err)
-		return err
-	}
-	// s.ServiceLogger.Info("Detected code changes: restarting")
 	return nil
 }
 
 func (s *Runtime) Network(ctx context.Context) ([]*runtimev1.NetworkMapping, error) {
 	pm, err := network.NewServicePortManager(ctx, s.Identity, s.Endpoints...)
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot create default endpoint")
+		return nil, s.Wool.Wrapf(err, "cannot create default endpoint")
 	}
 	err = pm.Reserve(ctx)
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot reserve ports")
+		return nil, s.Wool.Wrapf(err, "cannot reserve ports")
 	}
 	return pm.NetworkMapping(ctx)
 }

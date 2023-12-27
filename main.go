@@ -20,7 +20,7 @@ import (
 var agent = shared.Must(configurations.LoadFromFs[configurations.Agent](shared.Embed(info)))
 
 type Settings struct {
-	Debug bool `yaml:"debug"` // Developer only
+	DeveloperDebug bool `yaml:"debug"` // Developer only
 }
 
 type Service struct {
@@ -39,7 +39,6 @@ func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv1.AgentInfor
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	s.DebugMe("readme success")
 
 	return &agentv1.AgentInformation{
 		Capabilities: []*agentv1.Capability{
@@ -75,7 +74,7 @@ func (s *Service) GetEnv() ([]string, error) {
 	// read the env file for auth0
 	f, err := os.ReadFile(s.Local("auth0.env"))
 	if err != nil {
-		return nil, s.Wrapf(err, "cannot read auth0.env")
+		return nil, s.Wool.Wrapf(err, "cannot read auth0.env")
 	}
 	envs := strings.Split(string(f), "\n")
 	return envs, nil
