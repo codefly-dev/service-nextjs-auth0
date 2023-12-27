@@ -2,7 +2,7 @@ module github.com/codefly-dev/service-nextjs-auth0
 
 go 1.21.5
 
-require github.com/codefly-dev/core v0.0.74
+require github.com/codefly-dev/core v0.0.76
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.31.0-20231115204500-e097f827e652.2 // indirect
