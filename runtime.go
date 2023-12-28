@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"github.com/codefly-dev/core/runners"
-	"github.com/codefly-dev/core/templates"
-	"github.com/codefly-dev/core/wool"
 	"os"
 
 	"github.com/codefly-dev/core/agents/helpers/code"
 	"github.com/codefly-dev/core/agents/network"
 	agentv1 "github.com/codefly-dev/core/generated/go/services/agent/v1"
 	runtimev1 "github.com/codefly-dev/core/generated/go/services/runtime/v1"
+	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/shared"
+	"github.com/codefly-dev/core/templates"
+	"github.com/codefly-dev/core/wool"
 )
 
 type Runtime struct {
@@ -41,6 +41,12 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev1.LoadRequest) (*runtim
 func (s *Runtime) Init(ctx context.Context, req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer s.Wool.Catch()
 
+	var err error
+	s.NetworkMappings, err = s.Network(ctx)
+	if err != nil {
+		return s.Runtime.InitError(err)
+	}
+
 	return s.Base.Runtime.InitResponse()
 }
 
@@ -51,23 +57,33 @@ type EnvLocal struct {
 func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer s.Wool.Catch()
 
+	ctx = s.Wool.Inject(ctx)
+
+	s.Wool.Debug("starting runtime", wool.RequestField(req).Trace())
+
+	s.Wool.Debug("converting incoming network mappings")
 	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
 	if err != nil {
-		return s.Base.Runtime.StartError(err)
+		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
 	}
+
 	local := EnvLocal{Envs: nws}
+
+	// TODO: Proper authentication
 	// Append Auth0
 	auth0, err := s.GetEnv()
 	if err != nil {
 		return s.Base.Runtime.StartError(err)
 	}
+
 	local.Envs = append(local.Envs, auth0...)
 
 	// Generate the .env.local
+	s.Wool.Debug("copying special files")
 	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
 		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
 	if err != nil {
-		return s.Base.Runtime.StartError(err)
+		return s.Base.Runtime.StartError(err, wool.InField("copying special files"))
 	}
 
 	// Add the group
@@ -78,11 +94,15 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 		Envs: os.Environ(),
 		Dir:  s.Location,
 	}
+	// As usual, create a new context! or we will stop as soon this function returns
+	ctx = context.Background()
+	ctx = s.Wool.Inject(ctx)
 	out, err := s.Runner.Run(ctx)
 	if err != nil {
-		return s.Base.Runtime.StartError(err)
+		return s.Base.Runtime.StartError(err, wool.InField("runner"))
 	}
 	tracker := runners.TrackedProcess{PID: out.PID}
+
 	s.Info("starting", wool.Field("pid", out.PID))
 
 	return s.Runtime.StartResponse([]*runtimev1.Tracker{tracker.Proto()})
