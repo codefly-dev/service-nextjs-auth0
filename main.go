@@ -3,11 +3,16 @@ package main
 import (
 	"context"
 	"embed"
+	"os"
+	"strings"
+
+	basev1 "github.com/codefly-dev/core/generated/go/base/v1"
+
+	"github.com/codefly-dev/core/configurations/standards"
+
 	"github.com/codefly-dev/core/templates"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"os"
-	"strings"
 
 	"github.com/codefly-dev/core/agents"
 	"github.com/codefly-dev/core/agents/services"
@@ -28,12 +33,11 @@ type Service struct {
 
 	// Settings
 	*Settings
+	Endpoint *basev1.Endpoint
 }
 
 func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv1.AgentInformationRequest) (*agentv1.AgentInformation, error) {
 	defer s.Wool.Catch()
-
-	s.Wool.Debug("get agent information")
 
 	readme, err := templates.ApplyTemplateFrom(shared.Embed(readme), "templates/agent/README.md", s.Information)
 	if err != nil {
@@ -78,6 +82,23 @@ func (s *Service) GetEnv() ([]string, error) {
 	}
 	envs := strings.Split(string(f), "\n")
 	return envs, nil
+}
+
+func (s *Service) LoadEndpoints(ctx context.Context) error {
+	defer s.Wool.Catch()
+	var err error
+	for _, endpoint := range s.Configuration.Endpoints {
+		switch endpoint.API {
+		case standards.HTTP:
+			s.Endpoint, err = configurations.NewHTTPApi(ctx, endpoint)
+			if err != nil {
+				return s.Wool.Wrapf(err, "cannot create openapi api")
+			}
+			s.Endpoints = append(s.Endpoints, s.Endpoint)
+			continue
+		}
+	}
+	return nil
 }
 
 //go:embed agent.codefly.yaml

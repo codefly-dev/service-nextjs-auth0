@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 
+	"github.com/codefly-dev/core/configurations"
+
 	"github.com/codefly-dev/core/agents/helpers/code"
 	"github.com/codefly-dev/core/agents/network"
 	agentv1 "github.com/codefly-dev/core/generated/go/services/agent/v1"
@@ -35,11 +37,17 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev1.LoadRequest) (*runtim
 		return s.Base.Runtime.LoadError(err)
 	}
 
+	err = s.LoadEndpoints(ctx)
+	if err != nil {
+		return s.Base.Runtime.LoadError(err)
+	}
 	return s.Base.Runtime.LoadResponse(s.Endpoints)
 }
 
 func (s *Runtime) Init(ctx context.Context, req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
 	defer s.Wool.Catch()
+
+	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
 
 	var err error
 	s.NetworkMappings, err = s.Network(ctx)
@@ -59,15 +67,15 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 
 	ctx = s.Wool.Inject(ctx)
 
-	s.Wool.Debug("starting runtime", wool.RequestField(req).Trace())
+	s.Wool.Debug("starting runtime", wool.NullableField("network mappings", network.MakeNetworkMappingSummary(req.NetworkMappings)))
 
-	s.Wool.Debug("converting incoming network mappings")
 	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
 	}
 
 	local := EnvLocal{Envs: nws}
+	s.Wool.Debug("env", wool.Field("envs", local))
 
 	// TODO: Proper authentication
 	// Append Auth0
