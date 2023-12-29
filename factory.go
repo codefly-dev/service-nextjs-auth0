@@ -125,7 +125,7 @@ func (s *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*fact
 	s.Wool.Debug("building docker image")
 
 	// We want to use DNS to create NetworkMapping
-	networkMapping, err := s.Network(configurations.FlattenEndpoints(ctx, req.DependencyEndpointGroup))
+	networkMapping, err := s.Network(req.DependenciesEndpoints)
 	if err != nil {
 		return nil, s.Wool.Wrapf(err, "cannot create network mapping")
 	}
@@ -200,7 +200,7 @@ func (s *Factory) Deploy(ctx context.Context, req *factoryv1.DeploymentRequest) 
 	defer s.Wool.Catch()
 
 	// We want to use DNS to create NetworkMapping
-	networkMapping, err := s.Network(configurations.FlattenEndpoints(ctx, req.DependencyEndpointGroup))
+	networkMapping, err := s.Network(req.DependenciesEndpoints)
 	if err != nil {
 		return nil, s.Wool.Wrapf(err, "cannot create network mapping")
 	}
