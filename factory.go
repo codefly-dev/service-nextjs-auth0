@@ -66,6 +66,7 @@ func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*fa
 	if err != nil {
 		return s.Factory.CreateError(err)
 	}
+
 	// Need to handle the case of pages/_aps.tsx
 	err = templates.Copy(ctx, shared.Embed(special),
 		shared.NewFile("templates/special/pages/app.tsx"), shared.NewFile(s.Local("pages/_app.tsx")))
@@ -79,22 +80,28 @@ func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*fa
 	// }
 	// s.Wool.Info("tree: %s", out)
 
+	s.Wool.Debug("removing node_modules")
 	err = os.RemoveAll(s.Local("node_modules"))
 	if err != nil {
 		return s.Factory.CreateError(err)
 	}
+
+	s.Wool.Debug("npm install")
 
 	s.Runner = &runners.Runner{
 		Name: s.Service.Identity.Name,
 		Bin:  "npm",
 		Args: []string{"install", "ci"},
 		Dir:  s.Location,
+		Envs: os.Environ(),
 	}
 
-	_, err = s.Runner.Run(ctx)
+	err = s.Runner.Run(ctx)
 	if err != nil {
 		return s.Factory.CreateError(err)
 	}
+
+	s.Wool.Debug("npm install done")
 
 	return s.Factory.CreateResponse(ctx, s.Settings, s.Endpoints...)
 }

@@ -105,7 +105,7 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	// As usual, create a new context! or we will stop as soon this function returns
 	ctx = context.Background()
 	ctx = s.Wool.Inject(ctx)
-	out, err := s.Runner.Run(ctx)
+	out, err := s.Runner.Start(ctx)
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("runner"))
 	}
