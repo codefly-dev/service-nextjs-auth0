@@ -58,9 +58,13 @@ type CreateConfiguration struct {
 func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
 	defer s.Wool.Catch()
 
+	err := s.CreateEndpoint(ctx)
+	if err != nil {
+		return s.Factory.CreateError(err)
+	}
 	ignores := []string{"node_modules", ".next", ".idea"}
 
-	err := s.Templates(ctx, s.Information, services.WithFactory(factory, ignores...), services.WithBuilder(builder))
+	err = s.Templates(ctx, s.Information, services.WithFactory(factory, ignores...), services.WithBuilder(builder))
 	if err != nil {
 		return s.Factory.CreateError(err)
 	}
@@ -259,8 +263,12 @@ func (s *Factory) Network(es []*basev1.Endpoint) ([]*runtimev1.NetworkMapping, e
 	return nil, nil
 }
 
-func (s *Factory) CreateEndpoints() error {
-
+func (s *Factory) CreateEndpoint(ctx context.Context) error {
+	http, err := configurations.NewHTTPApi(ctx, &configurations.Endpoint{Name: "web", Visibility: configurations.VisibilityPublic})
+	if err != nil {
+		return s.Wool.Wrapf(err, "cannot create HTTP api")
+	}
+	s.Endpoints = append(s.Endpoints, http)
 	return nil
 }
 
