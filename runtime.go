@@ -109,11 +109,13 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("runner"))
 	}
-	tracker := runners.TrackedProcess{PID: out.PID}
 
+	for event := range out.Events {
+		s.Wool.Debug("event", wool.Field("event", event))
+	}
 	s.Info("starting", wool.Field("pid", out.PID))
 
-	return s.Runtime.StartResponse([]*runtimev1.Tracker{tracker.Proto()})
+	return s.Runtime.StartResponse()
 }
 
 func (s *Runtime) Information(ctx context.Context, req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
