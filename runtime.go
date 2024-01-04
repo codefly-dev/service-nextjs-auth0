@@ -64,7 +64,6 @@ type EnvLocal struct {
 
 func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
 	defer s.Wool.Catch()
-
 	ctx = s.Wool.Inject(ctx)
 
 	s.Wool.Debug("starting runtime", wool.NullableField("network mappings", network.MakeNetworkMappingSummary(req.NetworkMappings)))
@@ -75,7 +74,6 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	}
 
 	local := EnvLocal{Envs: nws}
-	s.Wool.Debug("env", wool.Field("envs", local))
 
 	// TODO: Proper authentication
 	// Append Auth0
@@ -110,10 +108,12 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 		return s.Base.Runtime.StartError(err, wool.InField("runner"))
 	}
 
-	for event := range out.Events {
-		s.Wool.Debug("event", wool.Field("event", event))
-	}
-	s.Info("starting", wool.Field("pid", out.PID))
+	go func() {
+		for event := range out.Events {
+			s.Wool.Debug("event", wool.Field("event", event))
+		}
+	}()
+	s.Wool.Debug("starting", wool.Field("pid", out.PID))
 
 	return s.Runtime.StartResponse()
 }
