@@ -2,6 +2,7 @@
 .idea
 go.work*
 dist
+*lock
 
 dist/
 .DS_Store
