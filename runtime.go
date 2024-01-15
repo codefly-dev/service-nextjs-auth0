@@ -8,8 +8,8 @@ import (
 
 	"github.com/codefly-dev/core/agents/helpers/code"
 	"github.com/codefly-dev/core/agents/network"
-	agentv1 "github.com/codefly-dev/core/generated/go/services/agent/v1"
-	runtimev1 "github.com/codefly-dev/core/generated/go/services/runtime/v1"
+	agentv0 "github.com/codefly-dev/core/generated/go/services/agent/v0"
+	runtimev0 "github.com/codefly-dev/core/generated/go/services/runtime/v0"
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/shared"
 	"github.com/codefly-dev/core/templates"
@@ -20,7 +20,7 @@ type Runtime struct {
 	*Service
 	Runner *runners.Runner
 
-	// internal
+	EnvironmentVariables *configurations.EnvironmentVariableManager
 }
 
 func NewRuntime() *Runtime {
@@ -29,7 +29,7 @@ func NewRuntime() *Runtime {
 	}
 }
 
-func (s *Runtime) Load(ctx context.Context, req *runtimev1.LoadRequest) (*runtimev1.LoadResponse, error) {
+func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtimev0.LoadResponse, error) {
 	defer s.Wool.Catch()
 
 	err := s.Base.Load(ctx, req.Identity, s.Settings)
@@ -44,7 +44,7 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev1.LoadRequest) (*runtim
 	return s.Base.Runtime.LoadResponse(s.Endpoints)
 }
 
-func (s *Runtime) Init(ctx context.Context, req *runtimev1.InitRequest) (*runtimev1.InitResponse, error) {
+func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtimev0.InitResponse, error) {
 	defer s.Wool.Catch()
 
 	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
@@ -55,14 +55,16 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev1.InitRequest) (*runtim
 		return s.Runtime.InitError(err)
 	}
 
+	s.EnvironmentVariables = configurations.NewEnvironmentVariableManager()
+	for _, prov := range req.ProviderInfos {
+		env := configurations.ProviderInformationAsEnvironmentVariables(prov)
+		s.EnvironmentVariables.Add(env...)
+	}
+
 	return s.Base.Runtime.InitResponse()
 }
 
-type EnvLocal struct {
-	Envs []string
-}
-
-func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runtimev1.StartResponse, error) {
+func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runtimev0.StartResponse, error) {
 	defer s.Wool.Catch()
 	ctx = s.Wool.Inject(ctx)
 
@@ -72,22 +74,20 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
 	}
+	envs := s.EnvironmentVariables.GetBase()
 
-	local := EnvLocal{Envs: nws}
+	envs = append(envs, nws...)
 
-	// TODO: Proper authentication
-	// Append Auth0
-	auth0, err := s.GetEnv()
 	if err != nil {
 		return s.Base.Runtime.StartError(err)
 	}
 
-	local.Envs = append(local.Envs, auth0...)
-
 	// Generate the .env.local
 	s.Wool.Debug("copying special files")
 	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
-		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
+		shared.NewFile("templates/special/env.local.tmpl"),
+		shared.NewFile(s.Local(".env.local")),
+		envs)
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("copying special files"))
 	}
@@ -118,11 +118,11 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev1.StartRequest) (*runt
 	return s.Runtime.StartResponse()
 }
 
-func (s *Runtime) Information(ctx context.Context, req *runtimev1.InformationRequest) (*runtimev1.InformationResponse, error) {
-	return &runtimev1.InformationResponse{}, nil
+func (s *Runtime) Information(ctx context.Context, req *runtimev0.InformationRequest) (*runtimev0.InformationResponse, error) {
+	return &runtimev0.InformationResponse{}, nil
 }
 
-func (s *Runtime) Stop(ctx context.Context, req *runtimev1.StopRequest) (*runtimev1.StopResponse, error) {
+func (s *Runtime) Stop(ctx context.Context, req *runtimev0.StopRequest) (*runtimev0.StopResponse, error) {
 	defer s.Wool.Catch()
 
 	s.Wool.Debug("stopping service")
@@ -135,10 +135,10 @@ func (s *Runtime) Stop(ctx context.Context, req *runtimev1.StopRequest) (*runtim
 	if err != nil {
 		return nil, err
 	}
-	return &runtimev1.StopResponse{}, nil
+	return &runtimev0.StopResponse{}, nil
 }
 
-func (s *Runtime) Communicate(ctx context.Context, req *agentv1.Engage) (*agentv1.InformationRequest, error) {
+func (s *Runtime) Communicate(ctx context.Context, req *agentv0.Engage) (*agentv0.InformationRequest, error) {
 	return s.Base.Communicate(ctx, req)
 }
 
@@ -151,7 +151,7 @@ func (s *Runtime) EventHandler(event code.Change) error {
 	return nil
 }
 
-func (s *Runtime) Network(ctx context.Context) ([]*runtimev1.NetworkMapping, error) {
+func (s *Runtime) Network(ctx context.Context) ([]*runtimev0.NetworkMapping, error) {
 	pm, err := network.NewServicePortManager(ctx, s.Identity, s.Endpoints...)
 	if err != nil {
 		return nil, s.Wool.Wrapf(err, "cannot create default endpoint")

@@ -6,11 +6,15 @@ import (
 	"os"
 	"strings"
 
+	"github.com/codefly-dev/core/agents/network"
 	"github.com/codefly-dev/core/agents/services"
+	"github.com/codefly-dev/core/builders"
 	"github.com/codefly-dev/core/configurations"
-	basev1 "github.com/codefly-dev/core/generated/go/base/v1"
-	factoryv1 "github.com/codefly-dev/core/generated/go/services/factory/v1"
-	runtimev1 "github.com/codefly-dev/core/generated/go/services/runtime/v1"
+	basev0 "github.com/codefly-dev/core/generated/go/base/v0"
+	factoryv0 "github.com/codefly-dev/core/generated/go/services/factory/v0"
+	runtimev0 "github.com/codefly-dev/core/generated/go/services/runtime/v0"
+
+	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
 
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/shared"
@@ -20,7 +24,8 @@ import (
 type Factory struct {
 	*Service
 
-	Runner *runners.Runner
+	Runner               *runners.Runner
+	EnvironmentVariables *configurations.EnvironmentVariableManager
 }
 
 func NewFactory() *Factory {
@@ -29,7 +34,7 @@ func NewFactory() *Factory {
 	}
 }
 
-func (s *Factory) Load(ctx context.Context, req *factoryv1.LoadRequest) (*factoryv1.LoadResponse, error) {
+func (s *Factory) Load(ctx context.Context, req *factoryv0.LoadRequest) (*factoryv0.LoadResponse, error) {
 	defer s.Wool.Catch()
 
 	err := s.Factory.Load(ctx, req.Identity, s.Settings)
@@ -42,7 +47,9 @@ func (s *Factory) Load(ctx context.Context, req *factoryv1.LoadRequest) (*factor
 		return nil, err
 	}
 
-	return &factoryv1.LoadResponse{
+	s.EnvironmentVariables = configurations.NewEnvironmentVariableManager()
+
+	return &factoryv0.LoadResponse{
 		Version:        s.Version(),
 		Endpoints:      s.Endpoints,
 		GettingStarted: gettingStarted,
@@ -55,7 +62,7 @@ type CreateConfiguration struct {
 	Envs   []string
 }
 
-func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*factoryv1.CreateResponse, error) {
+func (s *Factory) Create(ctx context.Context, req *factoryv0.CreateRequest) (*factoryv0.CreateResponse, error) {
 	defer s.Wool.Catch()
 
 	err := s.CreateEndpoint(ctx)
@@ -64,23 +71,18 @@ func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*fa
 	}
 	ignores := []string{"node_modules", ".next", ".idea"}
 
-	err = s.Templates(ctx, s.Information, services.WithFactory(factory, ignores...), services.WithBuilder(builder))
+	err = s.Templates(ctx, s.Information, services.WithFactory(factory, ignores...))
 	if err != nil {
 		return s.Factory.CreateError(err)
 	}
 
 	// Need to handle the case of pages/_aps.tsx
 	err = templates.Copy(ctx, shared.Embed(special),
-		shared.NewFile("templates/special/pages/app.tsx"), shared.NewFile(s.Local("pages/_app.tsx")))
+		shared.NewFile("templates/special/pages/app.tsx"),
+		shared.NewFile(s.Local("pages/_app.tsx")))
 	if err != nil {
 		return s.Factory.CreateError(err)
 	}
-
-	// out, err := shared.GenerateTree(s.Location, " ")
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// s.Wool.Info("tree: %s", out)
 
 	s.Wool.Debug("removing node_modules")
 	err = os.RemoveAll(s.Local("node_modules"))
@@ -108,21 +110,30 @@ func (s *Factory) Create(ctx context.Context, req *factoryv1.CreateRequest) (*fa
 	return s.Factory.CreateResponse(ctx, s.Settings, s.Endpoints...)
 }
 
-func (s *Factory) Init(ctx context.Context, req *factoryv1.InitRequest) (*factoryv1.InitResponse, error) {
+func (s *Factory) Init(ctx context.Context, req *factoryv0.InitRequest) (*factoryv0.InitResponse, error) {
 	defer s.Wool.Catch()
-	return s.Factory.InitResponse()
+	ctx = s.Wool.Inject(ctx)
+
+	s.DependencyEndpoints = req.DependenciesEndpoints
+
+	hash, err := requirements.Hash(ctx)
+	if err != nil {
+		return s.Factory.InitError(err)
+	}
+
+	return s.Factory.InitResponse(hash)
 }
 
-func (s *Factory) Update(ctx context.Context, req *factoryv1.UpdateRequest) (*factoryv1.UpdateResponse, error) {
+func (s *Factory) Update(ctx context.Context, req *factoryv0.UpdateRequest) (*factoryv0.UpdateResponse, error) {
 	defer s.Wool.Catch()
 
-	return &factoryv1.UpdateResponse{}, nil
+	return &factoryv0.UpdateResponse{}, nil
 }
 
-func (s *Factory) Sync(ctx context.Context, req *factoryv1.SyncRequest) (*factoryv1.SyncResponse, error) {
+func (s *Factory) Sync(ctx context.Context, req *factoryv0.SyncRequest) (*factoryv0.SyncResponse, error) {
 	defer s.Wool.Catch()
 
-	return &factoryv1.SyncResponse{}, nil
+	return &factoryv0.SyncResponse{}, nil
 }
 
 type Env struct {
@@ -131,61 +142,67 @@ type Env struct {
 }
 
 type DockerTemplating struct {
-	Envs []Env
+	Envs       []Env
+	Dependency builders.Dependency
 }
 
-func (s *Factory) Build(ctx context.Context, req *factoryv1.BuildRequest) (*factoryv1.BuildResponse, error) {
-
+func (s *Factory) Build(ctx context.Context, req *factoryv0.BuildRequest) (*factoryv0.BuildResponse, error) {
 	s.Wool.Debug("building docker image")
-	//
-	//// We want to use DNS to create NetworkMapping
-	//networkMapping, err := s.Network(req.DependenciesEndpoints)
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot create network mapping")
-	//}
-	//
-	//nws, err := network.ConvertToEnvironmentVariables(networkMapping)
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot convert network mappings")
-	//}
-	//local := EnvLocal{Envs: nws}
-	//// Append Auth0
-	//auth0, err := s.GetEnv()
+	ctx = s.Wool.Inject(ctx)
+
+	docker := DockerTemplating{
+		Dependency: *requirements,
+	}
+
+	// We want to use DNS to create NetworkMapping
+	networkMapping, err := s.Network(s.DependencyEndpoints)
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot create network mapping")
+	}
+
+	nws, err := network.ConvertToEnvironmentVariables(networkMapping)
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot convert network mappings")
+	}
+
+	s.EnvironmentVariables.Add(nws...)
+
+	//for _, inf
 	//if err != nil {
 	//	return nil, s.Wool.Wrapf(err, "cannot get env")
 	//}
 	//local.Envs = append(local.Envs, auth0...)
 	//
-	//// Generate the .env.local
-	//err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
-	//	shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), local)
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot copy special template")
-	//}
-	//
-	//err = os.Remove(s.Local("codefly/builder/Dockerfile"))
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot remove dockerfile")
-	//}
-	//err = s.Templates(ctx, services.WithBuilder(builder))
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot copy and apply template")
-	//}
-	//builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
-	//	Root:       s.Location,
-	//	Dockerfile: "codefly/builder/Dockerfile",
-	//	Image:      s.DockerImage().Name,
-	//	Tag:        s.DockerImage().Tag,
-	//})
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot create builder")
-	//}
-	//// builder.WithLogger(s.Wool)
-	//_, err = builder.Build(ctx)
-	//if err != nil {
-	//	return nil, s.Wool.Wrapf(err, "cannot build image")
-	//}
-	return &factoryv1.BuildResponse{}, nil
+	// Generate the .env.local
+	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
+		shared.NewFile("templates/special/env.local.tmpl"), shared.NewFile(s.Local(".env.local")), s.EnvironmentVariables.Get())
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot copy special template")
+	}
+
+	err = shared.DeleteFile(ctx, s.Local("codefly/builder/Dockerfile"))
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot remove dockerfile")
+	}
+
+	err = s.Templates(ctx, docker, services.WithBuilder(builder))
+	if err != nil {
+		return s.Factory.BuildError(err)
+	}
+
+	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
+		Root:        s.Location,
+		Dockerfile:  "codefly/builder/Dockerfile",
+		Destination: s.DockerImage(),
+	})
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot create builder")
+	}
+	_, err = builder.Build(ctx)
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot build image")
+	}
+	return &factoryv0.BuildResponse{}, nil
 }
 
 type Deployment struct {
@@ -210,7 +227,7 @@ func EnvsAsMap(envs []string) map[string]string {
 	return m
 }
 
-func (s *Factory) Deploy(ctx context.Context, req *factoryv1.DeploymentRequest) (*factoryv1.DeploymentResponse, error) {
+func (s *Factory) Deploy(ctx context.Context, req *factoryv0.DeploymentRequest) (*factoryv0.DeploymentResponse, error) {
 	defer s.Wool.Catch()
 	//
 	//// We want to use DNS to create NetworkMapping
@@ -240,10 +257,10 @@ func (s *Factory) Deploy(ctx context.Context, req *factoryv1.DeploymentRequest) 
 	//if err != nil {
 	//	return nil, err
 	//}
-	return &factoryv1.DeploymentResponse{}, nil
+	return &factoryv0.DeploymentResponse{}, nil
 }
 
-func (s *Factory) Network(es []*basev1.Endpoint) ([]*runtimev1.NetworkMapping, error) {
+func (s *Factory) Network(es []*basev0.Endpoint) ([]*runtimev0.NetworkMapping, error) {
 	//s.DebugMe("in network: %v", configurations.Condensed(es))
 	//pm, err := network.NewServiceDnsManager(ctx, s.Identity)
 	//if err != nil {

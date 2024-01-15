@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"embed"
-	"os"
-	"strings"
 
-	basev1 "github.com/codefly-dev/core/generated/go/base/v1"
+	"github.com/codefly-dev/core/builders"
+
+	basev0 "github.com/codefly-dev/core/generated/go/base/v0"
 
 	"github.com/codefly-dev/core/configurations/standards"
 
@@ -17,12 +17,15 @@ import (
 	"github.com/codefly-dev/core/agents"
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/configurations"
-	agentv1 "github.com/codefly-dev/core/generated/go/services/agent/v1"
+	agentv0 "github.com/codefly-dev/core/generated/go/services/agent/v0"
 	"github.com/codefly-dev/core/shared"
 )
 
 // Agent version
 var agent = shared.Must(configurations.LoadFromFs[configurations.Agent](shared.Embed(info)))
+
+var requirements = &builders.Dependency{Components: []string{"components", "interfaces", "pages", "styles", "additional.d.ts",
+	"next-env.d.ts", "tsconfig.json", "postcss.config.js", "tailwind.config.js", "package.json", ".env.local"}}
 
 type Settings struct {
 	DeveloperDebug bool `yaml:"debug"` // Developer only
@@ -33,10 +36,10 @@ type Service struct {
 
 	// Settings
 	*Settings
-	Endpoint *basev1.Endpoint
+	Endpoint *basev0.Endpoint
 }
 
-func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv1.AgentInformationRequest) (*agentv1.AgentInformation, error) {
+func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv0.AgentInformationRequest) (*agentv0.AgentInformation, error) {
 	defer s.Wool.Catch()
 
 	readme, err := templates.ApplyTemplateFrom(shared.Embed(readme), "templates/agent/README.md", s.Information)
@@ -44,20 +47,20 @@ func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv1.AgentInfor
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &agentv1.AgentInformation{
-		RuntimeRequirements: []*agentv1.RuntimeRequirement{
-			{Type: agentv1.RuntimeRequirement_NPM},
+	return &agentv0.AgentInformation{
+		RuntimeRequirements: []*agentv0.Runtime{
+			{Type: agentv0.Runtime_NPM},
 		},
-		Capabilities: []*agentv1.Capability{
-			{Type: agentv1.Capability_FACTORY},
-			{Type: agentv1.Capability_RUNTIME},
+		Capabilities: []*agentv0.Capability{
+			{Type: agentv0.Capability_FACTORY},
+			{Type: agentv0.Capability_RUNTIME},
 		},
-		Languages: []*agentv1.Language{
-			{Type: agentv1.Language_TYPESCRIPT},
-			{Type: agentv1.Language_JAVASCRIPT},
+		Languages: []*agentv0.Language{
+			{Type: agentv0.Language_TYPESCRIPT},
+			{Type: agentv0.Language_JAVASCRIPT},
 		},
-		Protocols: []*agentv1.Protocol{
-			{Type: agentv1.Protocol_HTTP},
+		Protocols: []*agentv0.Protocol{
+			{Type: agentv0.Protocol_HTTP},
 		},
 		ReadMe: readme,
 	}, nil
@@ -71,20 +74,7 @@ func NewService() *Service {
 }
 
 func main() {
-	agents.Register(
-		services.NewServiceAgent(agent.Of(configurations.ServiceAgent), NewService()),
-		services.NewFactoryAgent(agent.Of(configurations.RuntimeServiceAgent), NewFactory()),
-		services.NewRuntimeAgent(agent.Of(configurations.FactoryServiceAgent), NewRuntime()))
-}
-
-func (s *Service) GetEnv() ([]string, error) {
-	// read the env file for auth0
-	f, err := os.ReadFile(s.Local("auth0.env"))
-	if err != nil {
-		return nil, s.Wool.Wrapf(err, "cannot read auth0.env")
-	}
-	envs := strings.Split(string(f), "\n")
-	return envs, nil
+	agents.Register(services.NewServiceAgent(agent.Of(configurations.ServiceAgent), NewService()), services.NewFactoryAgent(agent.Of(configurations.RuntimeServiceAgent), NewFactory()), services.NewRuntimeAgent(agent.Of(configurations.FactoryServiceAgent), NewRuntime()))
 }
 
 func (s *Service) LoadEndpoints(ctx context.Context) error {
