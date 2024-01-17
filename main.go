@@ -25,7 +25,9 @@ import (
 var agent = shared.Must(configurations.LoadFromFs[configurations.Agent](shared.Embed(info)))
 
 var requirements = &builders.Dependency{Components: []string{"components", "interfaces", "pages", "styles", "additional.d.ts",
-	"next-env.d.ts", "tsconfig.json", "postcss.config.js", "tailwind.config.js", "package.json", ".env.local"}}
+	"next-env.d.ts", "tsconfig.json", "postcss.config.js", "tailwind.config.js", "package.json", ".env.local"}, Ignore: shared.NewIgnore("node_modules/*")}
+
+const Auth0 = "auth0"
 
 type Settings struct {
 	DeveloperDebug bool `yaml:"debug"` // Developer only
@@ -79,15 +81,16 @@ func main() {
 
 func (s *Service) LoadEndpoints(ctx context.Context) error {
 	defer s.Wool.Catch()
-	var err error
 	for _, endpoint := range s.Configuration.Endpoints {
+		endpoint.Application = s.Configuration.Application
+		endpoint.Service = s.Configuration.Name
 		switch endpoint.API {
 		case standards.HTTP:
-			s.Endpoint, err = configurations.NewHTTPApi(ctx, endpoint)
+			http, err := configurations.NewHTTPApi(ctx, endpoint)
 			if err != nil {
 				return s.Wool.Wrapf(err, "cannot create openapi api")
 			}
-			s.Endpoints = append(s.Endpoints, s.Endpoint)
+			s.Endpoints = []*basev0.Endpoint{http}
 			continue
 		}
 	}

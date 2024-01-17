@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/codefly-dev/core/configurations"
 
@@ -21,6 +23,7 @@ type Runtime struct {
 	Runner *runners.Runner
 
 	EnvironmentVariables *configurations.EnvironmentVariableManager
+	port                 string
 }
 
 func NewRuntime() *Runtime {
@@ -41,7 +44,7 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtim
 	if err != nil {
 		return s.Base.Runtime.LoadError(err)
 	}
-	return s.Base.Runtime.LoadResponse(s.Endpoints)
+	return s.Base.Runtime.LoadResponse()
 }
 
 func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtimev0.InitResponse, error) {
@@ -55,11 +58,17 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 		return s.Runtime.InitError(err)
 	}
 
+	address := s.NetworkMappings[0].Addresses[0]
+	s.port = strings.Split(address, ":")[1]
+
 	s.EnvironmentVariables = configurations.NewEnvironmentVariableManager()
-	for _, prov := range req.ProviderInfos {
-		env := configurations.ProviderInformationAsEnvironmentVariables(prov)
-		s.EnvironmentVariables.Add(env...)
+
+	auth0, err := configurations.GetProjectProvider(Auth0, req.ProviderInfos)
+	if err != nil {
+		return s.Runtime.InitError(err)
 	}
+	env := configurations.ProviderInformationAsEnvironmentVariables(auth0)
+	s.EnvironmentVariables.Add(env...)
 
 	return s.Base.Runtime.InitResponse()
 }
@@ -77,6 +86,7 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 	envs := s.EnvironmentVariables.GetBase()
 
 	envs = append(envs, nws...)
+	envs = append(envs, fmt.Sprintf("PORT=%s", s.port))
 
 	if err != nil {
 		return s.Base.Runtime.StartError(err)
@@ -149,16 +159,4 @@ func (s *Runtime) Communicate(ctx context.Context, req *agentv0.Engage) (*agentv
 func (s *Runtime) EventHandler(event code.Change) error {
 	s.Wool.Debug("got an event: %v")
 	return nil
-}
-
-func (s *Runtime) Network(ctx context.Context) ([]*runtimev0.NetworkMapping, error) {
-	pm, err := network.NewServicePortManager(ctx, s.Identity, s.Endpoints...)
-	if err != nil {
-		return nil, s.Wool.Wrapf(err, "cannot create default endpoint")
-	}
-	err = pm.Reserve(ctx)
-	if err != nil {
-		return nil, s.Wool.Wrapf(err, "cannot reserve ports")
-	}
-	return pm.NetworkMapping(ctx)
 }

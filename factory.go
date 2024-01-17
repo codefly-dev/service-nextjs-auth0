@@ -107,6 +107,8 @@ func (s *Factory) Create(ctx context.Context, req *factoryv0.CreateRequest) (*fa
 
 	s.Wool.Debug("npm install done")
 
+	s.Configuration.ProviderDependencies = []string{"auth0"}
+
 	return s.Factory.CreateResponse(ctx, s.Settings, s.Endpoints...)
 }
 
