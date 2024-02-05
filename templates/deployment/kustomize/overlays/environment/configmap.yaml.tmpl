@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-{{ .Service.Unique.DNSCase }}
+data:
+{{- range $key, $value := .Parameters.ConfigMap }}
+  {{$key}}: {{$value}}
+{{- end }}

@@ -3,13 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
-
 	"github.com/codefly-dev/core/configurations"
+	basev0 "github.com/codefly-dev/core/generated/go/base/v0"
 
 	"github.com/codefly-dev/core/agents/helpers/code"
-	"github.com/codefly-dev/core/agents/network"
 	agentv0 "github.com/codefly-dev/core/generated/go/services/agent/v0"
 	runtimev0 "github.com/codefly-dev/core/generated/go/services/runtime/v0"
 	"github.com/codefly-dev/core/runners"
@@ -22,8 +19,8 @@ type Runtime struct {
 	*Service
 	Runner *runners.Runner
 
-	EnvironmentVariables *configurations.EnvironmentVariableManager
-	port                 string
+	port            int
+	NetworkMappings []*basev0.NetworkMapping
 }
 
 func NewRuntime() *Runtime {
@@ -40,6 +37,8 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtim
 		return s.Base.Runtime.LoadError(err)
 	}
 
+	s.EnvironmentVariables = s.LoadEnvironmentVariables(req.Environment)
+
 	err = s.LoadEndpoints(ctx)
 	if err != nil {
 		return s.Base.Runtime.LoadError(err)
@@ -52,21 +51,22 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 
 	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
 
-	var err error
-	s.NetworkMappings, err = s.Network(ctx)
+	s.NetworkMappings = req.NetworkMappings
+	//
+	//net, err := configurations.GetMappingInstance(s.NetworkMappings)
+	//if err != nil {
+	//	return s.Runtime.InitError(err)
+	//}
+	//s.LogForward("will run on: %s", net.Address)
+
+	// Auth0 Callback configuration
+	s.port = 3000
+
+	auth0, err := configurations.FindProjectProvider(Auth0, req.ProviderInfos)
 	if err != nil {
 		return s.Runtime.InitError(err)
 	}
 
-	address := s.NetworkMappings[0].Addresses[0]
-	s.port = strings.Split(address, ":")[1]
-
-	s.EnvironmentVariables = configurations.NewEnvironmentVariableManager()
-
-	auth0, err := configurations.GetProjectProvider(Auth0, req.ProviderInfos)
-	if err != nil {
-		return s.Runtime.InitError(err)
-	}
 	env := configurations.ProviderInformationAsEnvironmentVariables(auth0)
 	s.EnvironmentVariables.Add(env...)
 
@@ -77,16 +77,23 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 	defer s.Wool.Catch()
 	ctx = s.Wool.Inject(ctx)
 
-	s.Wool.Debug("starting runtime", wool.NullableField("network mappings", network.MakeNetworkMappingSummary(req.NetworkMappings)))
+	s.Wool.Debug("network mappings", wool.NullableField("other", configurations.MakeNetworkMappingSummary(req.OtherNetworkMappings)))
 
-	nws, err := network.ConvertToEnvironmentVariables(req.NetworkMappings)
+	envs := s.EnvironmentVariables.GetBase()
+
+	publicNetworkMappings := configurations.ExtractPublicNetworkMappings(req.OtherNetworkMappings)
+
+	endpointEnvs, err := configurations.ExtractEndpointEnvironmentVariables(ctx, publicNetworkMappings)
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
 	}
-	envs := s.EnvironmentVariables.GetBase()
+	envs = append(envs, endpointEnvs...)
 
-	envs = append(envs, nws...)
-	envs = append(envs, fmt.Sprintf("PORT=%s", s.port))
+	restEnvs, err := configurations.ExtractRestRoutesEnvironmentVariables(ctx, publicNetworkMappings)
+	if err != nil {
+		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
+	}
+	envs = append(envs, restEnvs...)
 
 	if err != nil {
 		return s.Base.Runtime.StartError(err)
@@ -94,54 +101,55 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 
 	// Generate the .env.local
 	s.Wool.Debug("copying special files")
-	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(special),
-		shared.NewFile("templates/special/env.local.tmpl"),
-		shared.NewFile(s.Local(".env.local")),
+	err = templates.CopyAndApplyTemplate(ctx, shared.Embed(specialFS),
+		"templates/special/env.local.tmpl",
+		s.Local(".env.local"),
 		envs)
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("copying special files"))
 	}
 
-	// Add the group
-	s.Runner = &runners.Runner{
-		Name: s.Service.Identity.Name,
-		Bin:  "npm",
-		Args: []string{"run", "dev"},
-		Envs: os.Environ(),
-		Dir:  s.Location,
+	// We have hot-reloading built-in
+	if s.Runner != nil {
+		s.Wool.Debug("using built-in hot reloading")
+		return s.Runtime.StartResponse()
 	}
-	// As usual, create a new context! or we will stop as soon this function returns
-	ctx = context.Background()
-	ctx = s.Wool.Inject(ctx)
-	out, err := s.Runner.Start(ctx)
+
+	runningContext := s.Wool.Inject(context.Background())
+	runner, err := runners.NewRunner(runningContext, "npm", "run", "dev", "--", "-p", fmt.Sprintf("%d", s.port))
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("runner"))
 	}
+	s.Runner = runner
+	s.Runner.WithDir(s.Location)
 
-	go func() {
-		for event := range out.Events {
-			s.Wool.Debug("event", wool.Field("event", event))
-		}
-	}()
-	s.Wool.Debug("starting", wool.Field("pid", out.PID))
+	err = s.Runner.Start()
+	if err != nil {
+		return s.Base.Runtime.StartError(err, wool.InField("runner"))
+	}
 
 	return s.Runtime.StartResponse()
 }
 
 func (s *Runtime) Information(ctx context.Context, req *runtimev0.InformationRequest) (*runtimev0.InformationResponse, error) {
-	return &runtimev0.InformationResponse{}, nil
+	return s.Runtime.InformationResponse(ctx, req)
 }
 
 func (s *Runtime) Stop(ctx context.Context, req *runtimev0.StopRequest) (*runtimev0.StopResponse, error) {
 	defer s.Wool.Catch()
 
 	s.Wool.Debug("stopping service")
-	//err := s.Runner.Kill(ctx)
-	//if err != nil {
-	//	return nil, s.Wrapf(err, "cannot kill go")
-	//}
+	err := s.Runner.Stop()
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot kill go")
+	}
+	// Be nice and wait for port to be free
+	err = runners.WaitForPortUnbound(ctx, s.port)
+	if err != nil {
+		return nil, s.Wool.Wrapf(err, "cannot wait for port to be unbound")
+	}
 
-	err := s.Base.Stop()
+	err = s.Base.Stop()
 	if err != nil {
 		return nil, err
 	}

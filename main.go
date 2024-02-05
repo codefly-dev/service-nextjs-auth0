@@ -24,8 +24,11 @@ import (
 // Agent version
 var agent = shared.Must(configurations.LoadFromFs[configurations.Agent](shared.Embed(info)))
 
-var requirements = &builders.Dependency{Components: []string{"components", "interfaces", "pages", "styles", "additional.d.ts",
-	"next-env.d.ts", "tsconfig.json", "postcss.config.js", "tailwind.config.js", "package.json", ".env.local"}, Ignore: shared.NewIgnore("node_modules/*")}
+var requirements = builders.NewDependencies(agent.Name,
+	builders.NewDependency("service.codefly.yaml"),
+	builders.NewDependency("components", "interfaces", "pages", "styles", "additional.d.ts",
+		"next-env.d.ts", "tsconfig.json", "postcss.config.js", "tailwind.config.js", "package.json").WithPathSelect(shared.NewIgnore("node_modules/*")),
+)
 
 const Auth0 = "auth0"
 
@@ -36,6 +39,8 @@ type Settings struct {
 type Service struct {
 	*services.Base
 
+	EnvironmentVariables *configurations.EnvironmentVariableManager
+
 	// Settings
 	*Settings
 	Endpoint *basev0.Endpoint
@@ -44,7 +49,7 @@ type Service struct {
 func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv0.AgentInformationRequest) (*agentv0.AgentInformation, error) {
 	defer s.Wool.Catch()
 
-	readme, err := templates.ApplyTemplateFrom(shared.Embed(readme), "templates/agent/README.md", s.Information)
+	readme, err := templates.ApplyTemplateFrom(ctx, shared.Embed(readme), "templates/agent/README.md", s.Information)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -54,8 +59,9 @@ func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv0.AgentInfor
 			{Type: agentv0.Runtime_NPM},
 		},
 		Capabilities: []*agentv0.Capability{
-			{Type: agentv0.Capability_FACTORY},
+			{Type: agentv0.Capability_BUILDER},
 			{Type: agentv0.Capability_RUNTIME},
+			{Type: agentv0.Capability_HOT_RELOAD},
 		},
 		Languages: []*agentv0.Language{
 			{Type: agentv0.Language_TYPESCRIPT},
@@ -76,7 +82,7 @@ func NewService() *Service {
 }
 
 func main() {
-	agents.Register(services.NewServiceAgent(agent.Of(configurations.ServiceAgent), NewService()), services.NewFactoryAgent(agent.Of(configurations.RuntimeServiceAgent), NewFactory()), services.NewRuntimeAgent(agent.Of(configurations.FactoryServiceAgent), NewRuntime()))
+	agents.Register(services.NewServiceAgent(agent.Of(configurations.ServiceAgent), NewService()), services.NewBuilderAgent(agent.Of(configurations.RuntimeServiceAgent), NewBuilder()), services.NewRuntimeAgent(agent.Of(configurations.BuilderServiceAgent), NewRuntime()))
 }
 
 func (s *Service) LoadEndpoints(ctx context.Context) error {

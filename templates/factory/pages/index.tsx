@@ -6,7 +6,14 @@ import { useState } from "react";
 import { JSONView } from "../components/json-view";
 import useSWR from "swr";
 
-export const callApi = async (url, token) => {
+const userHeaders = (user) => {
+  return {
+    "X-Codefly-User-Email": user.email,
+    "X-Codefly-User-Name": user.name,
+  }
+}
+
+export const callApi = async (url, token, user) => {
   try {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -40,7 +47,9 @@ const Home = ({
         .replace("CODEFLY_RESTROUTE__", "")
         .replace("___REST", "")
         .split("____", 2);
-    restPaths[endpoint] = prop.replaceAll("__", "/").toLowerCase();
+    const route = prop.replaceAll("__", "/").toLowerCase()
+    const id = `${endpoint} -> ${route}`
+    restPaths[id] = {endpoint: endpoint, route: route};
   });
 
 
@@ -54,9 +63,9 @@ const Home = ({
     isLoading: isLoadingEndpoint,
   } = useSWR(
       selectedEndpoint
-          ? `http://${restEndpoints[selectedEndpoint]}/${restPaths[selectedEndpoint]}`
+          ? `http://${restEndpoints[restPaths[selectedEndpoint].endpoint]}/${restPaths[selectedEndpoint].route}`
           : null,
-      (url) => callApi(url, accessToken?.data)
+      (url) => callApi(url, accessToken?.data, user)
   );
 
   return (
@@ -81,9 +90,9 @@ const Home = ({
                 className="w-full p-[10px] rounded-[5px] border-[1px] border-[#ddd]"
             >
               <option value="">Choose an endpoint</option>
-              {Object.keys(restEndpoints).map((key) => (
+              {Object.keys(restPaths).map((key) => (
                   <option key={key} value={key}>
-                    {key.replace("__", "/").toLowerCase()} ({restPaths[key]})
+                    {key.replace("__", "/").toLowerCase()}
                   </option>
               ))}
             </select>
@@ -95,8 +104,8 @@ const Home = ({
                   </p>
                   <JSONView>{`codefly({ endpoint: "${selectedEndpoint
                       .replace("__", "/")
-                      .toLowerCase()}", get: "/${
-                      restPaths[selectedEndpoint]
+                      .toLowerCase().split(" -> ")[0]}", get: "/${
+                      restPaths[selectedEndpoint].route
                   }" })`}</JSONView>
 
                   <div className="mt-4">
