@@ -226,6 +226,7 @@ func (s *Builder) Create(ctx context.Context, req *builderv0.CreateRequest) (*bu
 
 	s.Wool.Debug("npm install")
 
+	s.Wool.Info("installing npm dependencies. Coffee time! ☕️")
 	runner, err := runners.NewRunner(ctx, "npm", "install", "ci")
 	if err != nil {
 		return s.Builder.CreateError(err)

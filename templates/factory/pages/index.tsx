@@ -7,17 +7,19 @@ import { JSONView } from "../components/json-view";
 import useSWR from "swr";
 
 const userHeaders = (user) => {
-  return {
-    "X-Codefly-User-Email": user.email,
+  console.log(user)
+  return {"X-Codefly-User-Email": user.email,
     "X-Codefly-User-Name": user.name,
-  }
+    "X-Codefly-User-Given-Name": user.given_name,
+    "X-Codefly-User-Family-Name": user.family_name}
 }
 
 export const callApi = async (url, token, user) => {
   try {
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, ...userHeaders(user) },
     });
+
 
     if (!response.ok) {
       throw new Error('Network response was not ok');
