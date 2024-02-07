@@ -16,10 +16,14 @@ const userHeaders = (user) => {
 
 export const callApi = async (url, token, user) => {
   try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, ...userHeaders(user) },
-    });
-
+    var response;
+    if (user === undefined || user === null) {
+      response = await fetch(url);
+    } else {
+      response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}`, ...userHeaders(user) },
+      });
+    }
 
     if (!response.ok) {
       throw new Error('Network response was not ok');
