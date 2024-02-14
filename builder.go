@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/base64"
-	"github.com/codefly-dev/core/wool"
-	"os"
-	"strings"
-
 	dockerhelpers "github.com/codefly-dev/core/agents/helpers/docker"
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/configurations"
+	basev0 "github.com/codefly-dev/core/generated/go/base/v0"
 	builderv0 "github.com/codefly-dev/core/generated/go/services/builder/v0"
+	"github.com/codefly-dev/core/wool"
+	"os"
 
 	"github.com/codefly-dev/core/runners"
 	"github.com/codefly-dev/core/shared"
@@ -22,6 +20,7 @@ type Builder struct {
 	*Service
 
 	EnvironmentVariables *configurations.EnvironmentVariableManager
+	NetworkMappings      []*basev0.NetworkMapping
 }
 
 func NewBuilder() *Builder {
@@ -52,6 +51,8 @@ func (s *Builder) Init(ctx context.Context, req *builderv0.InitRequest) (*builde
 	defer s.Wool.Catch()
 	ctx = s.Wool.Inject(ctx)
 
+	s.NetworkMappings = req.ProposedNetworkMappings
+
 	s.Wool.In("Init").Debug("dependencies", wool.SliceCountField(req.DependenciesEndpoints))
 
 	auth0, err := configurations.FindProjectProvider(Auth0, req.ProviderInfos)
@@ -63,14 +64,12 @@ func (s *Builder) Init(ctx context.Context, req *builderv0.InitRequest) (*builde
 	s.EnvironmentVariables.Add(env...)
 
 	s.DependencyEndpoints = req.DependenciesEndpoints
-	//
-	//hash, err := requirements.Hash(ctx)
-	//if err != nil {
-	//	return s.Builder.InitError(err)
-	//}
-	hash := "TODO"
+	hash, err := requirements.Hash(ctx)
+	if err != nil {
+		return s.Builder.InitError(err)
+	}
 
-	return s.Builder.InitResponse(hash)
+	return s.Builder.InitResponse(s.NetworkMappings, hash)
 }
 
 func (s *Builder) Update(ctx context.Context, req *builderv0.UpdateRequest) (*builderv0.UpdateResponse, error) {
@@ -131,35 +130,6 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 	return &builderv0.BuildResponse{}, nil
 }
 
-type EnvironmentMap map[string]string
-
-type DeploymentParameter struct {
-	ConfigMap EnvironmentMap
-	SecretMap EnvironmentMap
-}
-
-func EnvsAsConfigMapData(envs []string) map[string]string {
-	m := make(map[string]string)
-	for _, env := range envs {
-		split := strings.SplitN(env, "=", 2)
-		if len(split) == 2 {
-			m[split[0]] = split[1]
-		}
-	}
-	return m
-}
-
-func EnvsAsSecretData(envs []string) map[string]string {
-	m := make(map[string]string)
-	for _, env := range envs {
-		split := strings.SplitN(env, "=", 2)
-		if len(split) == 2 {
-			m[split[0]] = base64.StdEncoding.EncodeToString([]byte(split[1]))
-		}
-	}
-	return m
-}
-
 func (s *Builder) Deploy(ctx context.Context, req *builderv0.DeploymentRequest) (*builderv0.DeploymentResponse, error) {
 	defer s.Wool.Catch()
 
@@ -177,10 +147,10 @@ func (s *Builder) Deploy(ctx context.Context, req *builderv0.DeploymentRequest) 
 
 	envs = append(envs, restEnvs...)
 
-	endpoints := EnvsAsConfigMapData(envs)
+	endpoints := services.EnvsAsConfigMapData(envs)
 
-	auth0 := EnvsAsSecretData(s.EnvironmentVariables.GetBase())
-	params := DeploymentParameter{SecretMap: auth0, ConfigMap: endpoints}
+	auth0 := services.EnvsAsSecretData(s.EnvironmentVariables.GetBase())
+	params := services.DeploymentParameter{SecretMap: auth0, ConfigMap: endpoints}
 
 	err = s.Builder.Deploy(ctx, req, deploymentFS, params)
 	if err != nil {

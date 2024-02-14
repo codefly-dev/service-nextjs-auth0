@@ -51,7 +51,7 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 
 	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
 
-	s.NetworkMappings = req.NetworkMappings
+	s.NetworkMappings = req.ProposedNetworkMappings
 	//
 	//net, err := configurations.GetMappingInstance(s.NetworkMappings)
 	//if err != nil {
@@ -70,7 +70,7 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 	env := configurations.ProviderInformationAsEnvironmentVariables(auth0)
 	s.EnvironmentVariables.Add(env...)
 
-	return s.Base.Runtime.InitResponse()
+	return s.Base.Runtime.InitResponse(s.NetworkMappings)
 }
 
 func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runtimev0.StartResponse, error) {
