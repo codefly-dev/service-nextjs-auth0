@@ -55,7 +55,7 @@ func (s *Builder) Init(ctx context.Context, req *builderv0.InitRequest) (*builde
 
 	s.Wool.In("Init").Debug("dependencies", wool.SliceCountField(req.DependenciesEndpoints))
 
-	auth0, err := configurations.FindProjectProvider(Auth0, req.ProviderInfos)
+	auth0, err := configurations.FindProjectProvider(s.Settings.Auth0Provider, req.ProviderInfos)
 	if err != nil {
 		return s.Builder.InitError(err)
 	}

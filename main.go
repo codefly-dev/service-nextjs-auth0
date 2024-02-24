@@ -30,10 +30,9 @@ var requirements = builders.NewDependencies(agent.Name,
 		"next-env.d.ts", "tsconfig.json", "postcss.config.js", "tailwind.config.js", "package.json").WithPathSelect(shared.NewIgnore("node_modules/*")),
 )
 
-const Auth0 = "auth0"
-
 type Settings struct {
-	DeveloperDebug bool `yaml:"debug"` // Developer only
+	DeveloperDebug bool   `yaml:"debug"` // Developer only
+	Auth0Provider  string `yaml:"auth0-provider"`
 }
 
 type Service struct {

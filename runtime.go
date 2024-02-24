@@ -52,17 +52,11 @@ func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtim
 	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
 
 	s.NetworkMappings = req.ProposedNetworkMappings
-	//
-	//net, err := configurations.GetMappingInstance(s.NetworkMappings)
-	//if err != nil {
-	//	return s.Runtime.InitError(err)
-	//}
-	//s.LogForward("will run on: %s", net.Address)
 
 	// Auth0 Callback configuration
 	s.port = 3000
 
-	auth0, err := configurations.FindProjectProvider(Auth0, req.ProviderInfos)
+	auth0, err := configurations.FindProjectProvider(s.Settings.Auth0Provider, req.ProviderInfos)
 	if err != nil {
 		return s.Runtime.InitError(err)
 	}
@@ -82,6 +76,8 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 	envs := s.EnvironmentVariables.GetBase()
 
 	publicNetworkMappings := configurations.ExtractPublicNetworkMappings(req.OtherNetworkMappings)
+
+	s.Wool.Focus("public network mappings", wool.NullableField("public", configurations.MakeNetworkMappingSummary(publicNetworkMappings)))
 
 	endpointEnvs, err := configurations.ExtractEndpointEnvironmentVariables(ctx, publicNetworkMappings)
 	if err != nil {
@@ -142,11 +138,6 @@ func (s *Runtime) Stop(ctx context.Context, req *runtimev0.StopRequest) (*runtim
 	err := s.Runner.Stop()
 	if err != nil {
 		return nil, s.Wool.Wrapf(err, "cannot kill go")
-	}
-	// Be nice and wait for port to be free
-	err = runners.WaitForPortUnbound(ctx, s.port)
-	if err != nil {
-		return nil, s.Wool.Wrapf(err, "cannot wait for port to be unbound")
 	}
 
 	err = s.Base.Stop()
