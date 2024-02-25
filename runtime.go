@@ -43,13 +43,14 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtim
 	if err != nil {
 		return s.Base.Runtime.LoadError(err)
 	}
+	s.Wool.Focus("loading runtime", wool.NullableField("endpoints", configurations.MakeEndpointSummary(s.Endpoints)))
 	return s.Base.Runtime.LoadResponse()
 }
 
 func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtimev0.InitResponse, error) {
 	defer s.Wool.Catch()
 
-	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
+	s.Wool.Focus("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
 
 	s.NetworkMappings = req.ProposedNetworkMappings
 
@@ -83,12 +84,14 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
 	}
+
 	envs = append(envs, endpointEnvs...)
 
 	restEnvs, err := configurations.ExtractRestRoutesEnvironmentVariables(ctx, publicNetworkMappings)
 	if err != nil {
 		return s.Base.Runtime.StartError(err, wool.InField("converting incoming network mappings"))
 	}
+
 	envs = append(envs, restEnvs...)
 
 	if err != nil {
