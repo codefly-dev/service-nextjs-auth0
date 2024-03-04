@@ -43,14 +43,14 @@ func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtim
 	if err != nil {
 		return s.Base.Runtime.LoadError(err)
 	}
-	s.Wool.Focus("loading runtime", wool.NullableField("endpoints", configurations.MakeEndpointSummary(s.Endpoints)))
+	s.Wool.Debug("loading runtime", wool.NullableField("endpoints", configurations.MakeEndpointSummary(s.Endpoints)))
 	return s.Base.Runtime.LoadResponse()
 }
 
 func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtimev0.InitResponse, error) {
 	defer s.Wool.Catch()
 
-	s.Wool.Focus("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
+	s.Wool.Debug("initialize runtime", wool.NullableField("dependency endpoints", configurations.MakeEndpointSummary(req.DependenciesEndpoints)))
 
 	s.NetworkMappings = req.ProposedNetworkMappings
 
@@ -78,7 +78,7 @@ func (s *Runtime) Start(ctx context.Context, req *runtimev0.StartRequest) (*runt
 
 	publicNetworkMappings := configurations.ExtractPublicNetworkMappings(req.OtherNetworkMappings)
 
-	s.Wool.Focus("public network mappings", wool.NullableField("public", configurations.MakeNetworkMappingSummary(publicNetworkMappings)))
+	s.Wool.Debug("public network mappings", wool.NullableField("public", configurations.MakeNetworkMappingSummary(publicNetworkMappings)))
 
 	endpointEnvs, err := configurations.ExtractEndpointEnvironmentVariables(ctx, publicNetworkMappings)
 	if err != nil {
