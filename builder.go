@@ -98,6 +98,8 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 	s.Wool.Debug("building docker image")
 	ctx = s.Wool.Inject(ctx)
 
+	image := s.DockerImage(req.BuildContext)
+
 	s.Wool.In("Build").Debug("dependencies", wool.SliceCountField(s.DependencyEndpoints))
 
 	docker := DockerTemplating{
@@ -117,7 +119,7 @@ func (s *Builder) Build(ctx context.Context, req *builderv0.BuildRequest) (*buil
 	builder, err := dockerhelpers.NewBuilder(dockerhelpers.BuilderConfiguration{
 		Root:        s.Location,
 		Dockerfile:  "codefly/builder/Dockerfile",
-		Destination: s.DockerImage(),
+		Destination: image,
 		Output:      s.Wool,
 	})
 	if err != nil {
